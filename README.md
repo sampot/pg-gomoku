@@ -2,9 +2,23 @@
 
 瀏覽器五子棋（15×15）：雙人輪流、人機對弈、AI 對 AI 自動對弈。純前端，無建置步驟。
 
-也可當作 [Playgrounds](https://samkuo.me/playgrounds/) 的 **SAM**（`index.html` 入口）匯入或從 GitHub 一鍵開啟。
+也可當作 [Playgrounds（遊樂場）](https://samkuo.me/playgrounds/) 的 **SAM**（`index.html` 入口）。
 
-## 試玩
+## 一鍵開啟 SAM 小
+
+在遊樂場直接載入本儲存庫（需能連到 GitHub API）：
+
+**[一鍵開啟 SAM 小](https://samkuo.me/playgrounds/?open=sampot%2Fpg-gomoku&name=%E4%BA%94%E5%AD%90%E6%A3%8B)**
+
+等同網址：
+
+```
+https://samkuo.me/playgrounds/?open=sampot/pg-gomoku&name=五子棋
+```
+
+同源會重用本機已匯入的沙盒；要強制新建可加 `&fresh=1`。
+
+## 試玩（本機）
 
 用任何靜態伺服器開啟此目錄，例如：
 
@@ -36,10 +50,6 @@ python3 -m http.server 8080
 | `app.js` | Canvas 繪製、輸入、三種模式 |
 | `gomoku.js` | 棋盤、勝負、評分 AI |
 | `functions.js` | Playgrounds 可選 stub |
-
-## Playgrounds
-
-在遊樂場「自 GitHub 複製」或 `?open=` 指向本儲存庫即可。本機開發也可把此目錄上傳／匯入為沙盒。
 
 ## License
 
