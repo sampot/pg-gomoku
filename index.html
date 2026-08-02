@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="瀏覽器五子棋：雙人、人機、AI 對 AI。可於 Playgrounds 當 SAM 開啟。"
+    />
+    <title>五子棋</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <h1>五子棋</h1>
+        <p class="tagline">連成五子即勝 · 支援雙人／人機／AI 對 AI</p>
+      </header>
+
+      <section class="toolbar" aria-label="對局控制">
+        <div class="meta">
+          <p>
+            模式：<strong id="mode-label">雙人輪流</strong>
+          </p>
+          <p>
+            當前回合：<strong id="turn-display">黑棋</strong>
+          </p>
+        </div>
+        <div class="controls">
+          <button type="button" id="start-ai">開始 AI 對弈</button>
+          <button type="button" id="start-ai-vs-ai">AI 對 AI 自動對弈</button>
+          <button type="button" id="reset-game" class="secondary">
+            重新開始
+          </button>
+        </div>
+      </section>
+
+      <div class="board-container">
+        <canvas
+          id="game-board"
+          width="600"
+          height="600"
+          role="img"
+          aria-label="十五路五子棋盤"
+        ></canvas>
+      </div>
+
+      <p id="game-status" class="status" role="status">輪到黑棋，請落子。</p>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
