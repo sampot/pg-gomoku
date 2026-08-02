@@ -6,7 +6,8 @@
   --muted: #5c6570;
   --line: #d8dde3;
   --accent: #0f766e;
-  --on-accent: #042f2e;
+  /* Light text on dark teal — must stay high-contrast in light theme */
+  --on-accent: #ffffff;
   --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--panel));
   --board-light: #e0c49a;
   --board-dark: #c9a06a;
