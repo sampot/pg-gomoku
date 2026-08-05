@@ -2,18 +2,18 @@
 
 瀏覽器五子棋（15×15）：雙人輪流、人機對弈、AI 對 AI 自動對弈。純前端，無建置步驟。
 
-也可當作 [Playgrounds（遊樂場）](https://samkuo.me/playgrounds/) 的 **SAM**（`index.html` 入口）。
+也可當作 [Playgrounds（遊樂場）](https://play.samkuo.me/) 的 **SAM**（`index.html` 入口）。
 
 ## 一鍵開 SAM 小
 
 在遊樂場直接載入本儲存庫（需能連到 GitHub API）：
 
-**[一鍵開 SAM 小](https://samkuo.me/playgrounds/?open=sampot%2Fpg-gomoku&name=%E4%BA%94%E5%AD%90%E6%A3%8B)**
+**[一鍵開 SAM 小](https://play.samkuo.me/?open=sampot%2Fpg-gomoku&name=%E4%BA%94%E5%AD%90%E6%A3%8B)**
 
 等同網址：
 
 ```
-https://samkuo.me/playgrounds/?open=sampot/pg-gomoku&name=五子棋
+https://play.samkuo.me/?open=sampot/pg-gomoku&name=五子棋
 ```
 
 同源會重用本機已匯入的沙盒；要強制新建可加 `&fresh=1`。
