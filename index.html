@@ -45,6 +45,22 @@
           <button type="button" id="btn-invite" class="primary" disabled>
             邀請對手
           </button>
+          <fieldset id="first-move" class="first-move" hidden>
+            <legend>誰先（執黑）</legend>
+            <label class="first-opt">
+              <input
+                type="radio"
+                name="first-role"
+                value="host"
+                checked
+              />
+              我先
+            </label>
+            <label class="first-opt">
+              <input type="radio" name="first-role" value="player" />
+              對手先
+            </label>
+          </fieldset>
           <button type="button" id="btn-start-match" class="primary" disabled>
             開始
           </button>
@@ -64,7 +80,7 @@
             </button>
           </div>
           <p class="hint muted">
-            對手無需註冊。你須已「登入我的遊樂場」。入座後按「開始」才開局；終局後「再來一局」會立刻開下一局（同場連線）。
+            對手無需註冊。你須已「登入我的遊樂場」。入座後選誰先（先手執黑），再按「開始」；終局後可改先手再「再來一局」。
           </p>
         </div>
       </section>

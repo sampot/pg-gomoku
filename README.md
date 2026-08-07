@@ -47,7 +47,8 @@ python3 -m http.server 8080
 
 1. Host（已在後台「登入我的遊樂場」）按 **開場** → **邀請對手**；遊樂場會彈出短網址／QR（畫布最大化也看得到）。
 2. Guest（無需註冊）開短連結 → 同意入座。
-3. Host 見對手入座後按 **開始** 才開局（Host 黑／Guest 白）。
+3. Host 見對手入座後**選誰先**（先手固定執黑），再按 **開始**。
+4. 終局後 Host 可改先手再按 **再來一局**。
 
 Session protocol：`gomoku.v1`（見 [PG-INVITE-E2E-MVP](https://github.com/sampot/playgrounds/blob/main/docs/PG-INVITE-E2E-MVP.md)）。
 

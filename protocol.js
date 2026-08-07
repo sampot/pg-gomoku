@@ -20,8 +20,17 @@ export function gomokuProtocolSpec() {
     joinPolicy: GOMOKU_JOIN_POLICY,
     capabilities: ["start", "place", "reset"],
     boardSize: GOMOKU_BOARD_SIZE,
+    /** First mover always plays black; Host chooses which seat goes first. */
+    firstStone: "black",
     acts: [
-      { type: "start", roles: ["host"] },
+      {
+        type: "start",
+        roles: ["host"],
+        payload: {
+          firstRole: "host|player",
+          note: "誰先＝執黑；省略則沿用上一局或預設 host",
+        },
+      },
       {
         type: "place",
         roles: ["host", "player"],
@@ -30,7 +39,10 @@ export function gomokuProtocolSpec() {
       {
         type: "reset",
         roles: ["host"],
-        note: "ended → active（席仍在則直接開下一局）或 waiting；同 session／席位",
+        payload: {
+          firstRole: "host|player",
+          note: "ended → active（席仍在則直接開下一局）或 waiting；可改先手",
+        },
       },
     ],
   };

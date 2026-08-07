@@ -27,6 +27,7 @@ import {
  *   winner: null | 1 | 2 | 0;
  *   lastMove: null | { x: number; y: number; player: 1 | 2 };
  *   playerSeated: boolean;
+ *   firstRole: "host" | "player";
  * }} GomokuStore
  */
 
@@ -48,7 +49,14 @@ function emptyStore() {
     winner: null,
     lastMove: null,
     playerSeated: false,
+    /** Seat that moves first (= black). Host chooses on start／reset. */
+    firstRole: "host",
   };
+}
+
+/** @param {unknown} raw */
+function parseFirstRole(raw) {
+  return raw === "player" || raw === "host" ? raw : null;
 }
 
 async function loadStore(env) {
@@ -71,6 +79,7 @@ async function loadStore(env) {
           : null,
       lastMove: parsed.lastMove || null,
       playerSeated: Boolean(parsed.playerSeated),
+      firstRole: parseFirstRole(parsed.firstRole) || "host",
     };
   } catch {
     return emptyStore();
@@ -105,6 +114,7 @@ function publicState(store) {
     winner: store.winner,
     lastMove: store.lastMove,
     playerSeated: store.playerSeated,
+    firstRole: store.firstRole,
     boardSize: GOMOKU_BOARD_SIZE,
   };
 }
@@ -131,10 +141,28 @@ function applyGameToStore(store, game) {
   if (game.isGameOver()) store.status = "ended";
 }
 
-function roleStone(role) {
-  if (role === "host") return 1; // black
-  if (role === "player") return 2; // white
-  return null;
+/**
+ * First seat plays black (1); the other plays white (2).
+ * @param {string} role
+ * @param {"host" | "player"} firstRole
+ */
+function roleStone(role, firstRole) {
+  if (role !== "host" && role !== "player") return null;
+  const first = firstRole === "player" ? "player" : "host";
+  return role === first ? 1 : 2;
+}
+
+/**
+ * Resolve firstRole from act payload, else keep store, else host.
+ * @param {Record<string, unknown>} payload
+ * @param {GomokuStore} store
+ */
+function resolveFirstRole(payload, store) {
+  const fromPayload =
+    parseFirstRole(payload.firstRole) ||
+    parseFirstRole(payload.first) ||
+    null;
+  return fromPayload || store.firstRole || "host";
 }
 
 export default {
@@ -276,6 +304,7 @@ export default {
                 : "目前無法開始",
           );
         }
+        store.firstRole = resolveFirstRole(payload, store);
         store.status = "active";
         store.turn = "black";
         store.winner = null;
@@ -287,6 +316,7 @@ export default {
           type: "match.started",
           status: store.status,
           turn: store.turn,
+          firstRole: store.firstRole,
           seq: store.seq,
         };
         return json({
@@ -308,6 +338,7 @@ export default {
         }
         // Same session + seats: clear match and start next game immediately
         // (no second「開始」). If opponent left, fall back to waiting.
+        store.firstRole = resolveFirstRole(payload, store);
         store.board = emptyBoard();
         store.turn = "black";
         store.winner = null;
@@ -320,6 +351,7 @@ export default {
             type: "match.reset",
             status: store.status,
             turn: store.turn,
+            firstRole: store.firstRole,
             playerSeated: store.playerSeated,
             seq: store.seq,
           },
@@ -329,6 +361,7 @@ export default {
             type: "match.started",
             status: store.status,
             turn: store.turn,
+            firstRole: store.firstRole,
             seq: store.seq,
             rematch: true,
           });
@@ -347,7 +380,7 @@ export default {
         if (store.status !== "active") {
           return err("act_rejected", "尚未開始或已結束，無法落子");
         }
-        const stone = roleStone(role);
+        const stone = roleStone(role, store.firstRole || "host");
         if (!stone) return err("role_forbidden", "role 不允許落子");
         const expected = store.turn === "black" ? 1 : 2;
         if (stone !== expected) {

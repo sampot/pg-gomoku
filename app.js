@@ -30,6 +30,8 @@ let lastSeq = 0;
 let seatPollTimer = null;
 let onlineStatus = "waiting";
 let myOnlineStone = /** @type {null | 1 | 2} */ (null);
+/** @type {"host" | "player"} */
+let onlineFirstRole = "host";
 
 const canvas = document.getElementById("game-board");
 const ctx = canvas.getContext("2d");
@@ -52,9 +54,45 @@ const btnInvite = document.getElementById("btn-invite");
 const btnStartMatch = document.getElementById("btn-start-match");
 const btnRematch = document.getElementById("btn-rematch");
 const btnCloseSession = document.getElementById("btn-close-session");
+const firstMoveField = document.getElementById("first-move");
 const inviteBox = document.getElementById("invite-box");
 const inviteUrlInput = document.getElementById("invite-url");
 const btnCopyInvite = document.getElementById("btn-copy-invite");
+
+/** @param {"host" | "player"} role @param {"host" | "player"} firstRole */
+function stoneForRole(role, firstRole) {
+  const first = firstRole === "player" ? "player" : "host";
+  return role === first ? 1 : 2;
+}
+
+function stoneLabel(stone) {
+  return stone === 1 ? "黑" : stone === 2 ? "白" : "—";
+}
+
+function selectedFirstRole() {
+  const checked = document.querySelector(
+    'input[name="first-role"]:checked',
+  );
+  return checked && checked.value === "player" ? "player" : "host";
+}
+
+function setFirstRoleRadios(firstRole) {
+  const value = firstRole === "player" ? "player" : "host";
+  for (const input of document.querySelectorAll(
+    'input[name="first-role"]',
+  )) {
+    input.checked = input.value === value;
+  }
+}
+
+function applyFirstRole(firstRole) {
+  if (firstRole !== "host" && firstRole !== "player") return;
+  onlineFirstRole = firstRole;
+  setFirstRoleRadios(firstRole);
+  if (onlineRole === "host" || onlineRole === "player") {
+    myOnlineStone = stoneForRole(onlineRole, firstRole);
+  }
+}
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement)
@@ -410,6 +448,7 @@ function applyEventToOnlineBoard(event) {
   const type = String(event.type || "");
   if (type === "match.started") {
     onlineStatus = "active";
+    if (event.firstRole) applyFirstRole(event.firstRole);
     window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
       Array(BOARD_SIZE).fill(null),
     );
@@ -421,6 +460,7 @@ function applyEventToOnlineBoard(event) {
   }
   if (type === "match.reset") {
     onlineStatus = event.status || "active";
+    if (event.firstRole) applyFirstRole(event.firstRole);
     window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
       Array(BOARD_SIZE).fill(null),
     );
@@ -519,6 +559,7 @@ function applyHostEndedSession(message) {
   const wasPlayer = onlineRole === "player";
   onlineRole = "idle";
   myOnlineStone = null;
+  onlineFirstRole = "host";
   onlineStatus = "waiting";
   inviteBox.hidden = true;
   inviteUrlInput.value = "";
@@ -529,6 +570,7 @@ function applyHostEndedSession(message) {
 function applyOnlineState(state) {
   if (!state) return;
   onlineStatus = state.status || "waiting";
+  if (state.firstRole) applyFirstRole(state.firstRole);
   const board = Array.isArray(state.board) ? state.board : null;
   if (board) {
     window.__gomokuOnlineBoard = board.map((row) => row.slice());
@@ -547,7 +589,7 @@ function applyOnlineState(state) {
 function refreshOnlineStatusText() {
   if (onlineRole === "player") {
     if (onlineStatus === "waiting" || onlineStatus === "ready") {
-      setStatus("已入座 — 等待主持按「開始」");
+      setStatus("已入座 — 等待主持選先手並開始");
       return;
     }
   }
@@ -556,18 +598,18 @@ function refreshOnlineStatusText() {
   } else if (onlineStatus === "ready") {
     setStatus(
       onlineRole === "host"
-        ? "對手已入座 — 按「開始」開局（你執黑）"
+        ? "對手已入座 — 選誰先（執黑），再按「開始」"
         : "已入座 — 等待主持開始",
     );
   } else if (onlineStatus === "active") {
     const mine =
       myOnlineStone === 1 ? "black" : myOnlineStone === 2 ? "white" : null;
     const turn = turnDisplay.textContent.includes("白") ? "white" : "black";
-    if (mine && turn === mine) setStatus("輪到你，請落子。");
+    if (mine && turn === mine) setStatus(`輪到你（${stoneLabel(myOnlineStone)}），請落子。`);
     else setStatus("等待對手落子…");
   } else if (onlineStatus === "ended") {
     if (onlineRole === "host") {
-      setStatus("這一局已結束。按「再來一局」立刻開下一局。", "draw");
+      setStatus("這一局已結束。可改先手後按「再來一局」。", "draw");
     } else {
       setStatus("這一局已結束。等待主持再來一局…", "draw");
     }
@@ -577,16 +619,21 @@ function refreshOnlineStatusText() {
 function syncOnlineControls() {
   const hosting = onlineRole === "host";
   const asPlayer = onlineRole === "player";
+  const showFirstPick =
+    hosting && (onlineStatus === "ready" || onlineStatus === "ended");
   btnOpenSession.disabled = hosting;
   btnInvite.disabled = !hosting;
   btnCloseSession.disabled = !hosting;
   btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
   btnRematch.disabled = !(hosting && onlineStatus === "ended");
+  firstMoveField.hidden = !showFirstPick;
   // Invitee: play-first — hide mode switch + host CTAs (開場／邀請／開始…).
   playModeSection.hidden = asPlayer;
   onlineControls.hidden = asPlayer;
+  const stoneTxt =
+    myOnlineStone != null ? `你執${stoneLabel(myOnlineStone)}` : "先手待定";
   if (asPlayer) {
-    onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · 你執白`;
+    onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · ${stoneTxt}`;
     inviteBox.hidden = true;
     btnOpenSession.hidden = true;
     btnInvite.hidden = true;
@@ -594,7 +641,7 @@ function syncOnlineControls() {
     btnRematch.hidden = true;
     btnCloseSession.hidden = true;
   } else if (hosting) {
-    onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus}`;
+    onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus} · ${stoneTxt}`;
     btnOpenSession.hidden = false;
     btnInvite.hidden = false;
     btnStartMatch.hidden = onlineStatus === "ended";
@@ -661,7 +708,9 @@ async function onOpenSession() {
     stopAiVsAi();
     const opened = await shell("/open", { method: "POST" });
     onlineRole = "host";
-    myOnlineStone = 1;
+    onlineFirstRole = "host";
+    myOnlineStone = null;
+    setFirstRoleRadios("host");
     lastSeq = 0;
     bindSessionChannel(opened.channelName);
     await loadOnlineState();
@@ -724,16 +773,22 @@ async function onInviteOpponent() {
 async function onStartMatch() {
   setStatus("開始中…");
   try {
+    const firstRole = selectedFirstRole();
     const data = await hostDomain("/api/session/act", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         role: "host",
-        payload: { type: "start" },
+        payload: { type: "start", firstRole },
       }),
     });
     applyOnlineState(data.state);
-    setStatus("已開局 — 你執黑，請落子");
+    const mine = stoneLabel(myOnlineStone);
+    setStatus(
+      myOnlineStone === 1
+        ? `已開局 — 你執${mine}先手，請落子`
+        : `已開局 — 你執${mine}，等待對手先手`,
+    );
   } catch (e) {
     setStatus(String(e.message || e), "danger");
   }
@@ -742,17 +797,22 @@ async function onStartMatch() {
 async function onRematch() {
   setStatus("開下一局…");
   try {
+    const firstRole = selectedFirstRole();
     const data = await hostDomain("/api/session/act", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         role: "host",
-        payload: { type: "reset" },
+        payload: { type: "reset", firstRole },
       }),
     });
     applyOnlineState(data.state);
     if (onlineStatus === "active") {
-      setStatus("已開下一局 — 你執黑，請落子");
+      setStatus(
+        myOnlineStone === 1
+          ? `已開下一局 — 你執${stoneLabel(myOnlineStone)}先手，請落子`
+          : `已開下一局 — 你執${stoneLabel(myOnlineStone)}，等待對手先手`,
+      );
     } else {
       setStatus("棋盤已清空 — 等候對手入座");
     }
@@ -775,6 +835,7 @@ async function onCloseSession() {
     }
     onlineRole = "idle";
     myOnlineStone = null;
+    onlineFirstRole = "host";
     onlineStatus = "waiting";
     inviteBox.hidden = true;
     inviteUrlInput.value = "";
@@ -819,7 +880,7 @@ async function tryBootAsPlayer() {
     if (role !== "player" && role !== "host") return false;
     playMode = "online";
     onlineRole = role === "host" ? "host" : "player";
-    myOnlineStone = onlineRole === "host" ? 1 : 2;
+    myOnlineStone = null;
     onlinePanel.hidden = false;
     modeLocalBtn.classList.toggle("is-active", false);
     modeOnlineBtn.classList.toggle("is-active", true);
@@ -830,7 +891,7 @@ async function tryBootAsPlayer() {
     syncOnlineControls();
     setStatus(
       onlineRole === "player"
-        ? "已入座 — 等待主持按「開始」"
+        ? "已入座 — 等待主持選先手並開始"
         : "主持席已就緒",
     );
     return true;
