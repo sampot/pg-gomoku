@@ -640,8 +640,8 @@ async function onInviteOpponent() {
       return data;
     });
     inviteUrlInput.value = created.short_url || created.deep_link || "";
-    inviteBox.hidden = false;
-    setStatus("已建立短網址 — 分享給對手；保持本頁在線");
+    inviteBox.hidden = true;
+    setStatus("短網址已在遊樂場彈出 — 可複製或掃 QR；保持本頁在線");
   } catch (e) {
     const msg = String(e.message || e);
     if (/not_provisioned|通行證|登入我的遊樂場/i.test(msg)) {
