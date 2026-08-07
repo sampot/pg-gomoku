@@ -1,16 +1,35 @@
 import { GomokuGame } from "./gomoku.js";
+import {
+  GOMOKU_BOARD_SIZE,
+  GOMOKU_PROTOCOL_ID,
+  GOMOKU_SOURCE,
+  gomokuProtocolSpec,
+} from "./protocol.js";
 
-const BOARD_SIZE = 15;
+const BOARD_SIZE = GOMOKU_BOARD_SIZE;
 const CELL_SIZE = 40;
 const PADDING = 20;
 const CANVAS_SIZE = PADDING * 2 + CELL_SIZE * (BOARD_SIZE - 1);
 
+/** @type {'local' | 'online'} */
+let playMode = "local";
 /** @type {'pvp' | 'ai' | 'aivsai'} */
 let mode = "pvp";
 let game = new GomokuGame(BOARD_SIZE);
 /** @type {ReturnType<typeof setInterval> | null} */
 let aiVsAiTimer = null;
 let thinking = false;
+
+/** Online host／player */
+/** @type {'idle' | 'host' | 'player'} */
+let onlineRole = "idle";
+/** @type {BroadcastChannel | null} */
+let sessionChannel = null;
+let lastSeq = 0;
+/** @type {ReturnType<typeof setInterval> | null} */
+let seatPollTimer = null;
+let onlineStatus = "waiting";
+let myOnlineStone = /** @type {null | 1 | 2} */ (null);
 
 const canvas = document.getElementById("game-board");
 const ctx = canvas.getContext("2d");
@@ -20,6 +39,18 @@ const modeLabel = document.getElementById("mode-label");
 const startAiBtn = document.getElementById("start-ai");
 const startAiVsAiBtn = document.getElementById("start-ai-vs-ai");
 const resetBtn = document.getElementById("reset-game");
+const localToolbar = document.getElementById("local-toolbar");
+const onlinePanel = document.getElementById("online-panel");
+const modeLocalBtn = document.getElementById("mode-local");
+const modeOnlineBtn = document.getElementById("mode-online");
+const onlineMeta = document.getElementById("online-meta");
+const btnOpenSession = document.getElementById("btn-open-session");
+const btnInvite = document.getElementById("btn-invite");
+const btnStartMatch = document.getElementById("btn-start-match");
+const btnCloseSession = document.getElementById("btn-close-session");
+const inviteBox = document.getElementById("invite-box");
+const inviteUrlInput = document.getElementById("invite-url");
+const btnCopyInvite = document.getElementById("btn-copy-invite");
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement)
@@ -32,7 +63,6 @@ function syncCanvasBackingStore() {
   canvas.height = CANVAS_SIZE;
 }
 
-/** Map pointer event → board cell, accounting for CSS scaling. */
 function eventToCell(e) {
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
@@ -46,7 +76,7 @@ function eventToCell(e) {
   return { x, y };
 }
 
-function drawBoard() {
+function drawBoardFrom(board, last) {
   const boardDark = cssVar("--board-dark") || "#bcaaa4";
   const boardLight = cssVar("--board-light") || "#deb887";
   const stoneBlack = cssVar("--stone-black") || "#1a1a1a";
@@ -85,11 +115,9 @@ function drawBoard() {
     }
   }
 
-  const board = game.getBoard();
-  const last = game.getLastMove();
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
-      const player = board[y][x];
+      const player = board[y]?.[x];
       if (player == null) continue;
       drawStone(x, y, player, stoneBlack, stoneWhite, last);
     }
@@ -129,7 +157,25 @@ function playerName(p) {
   return p === 1 ? "黑棋" : "白棋";
 }
 
+function setStatus(message, tone = "") {
+  gameStatus.textContent = message;
+  gameStatus.dataset.tone = tone;
+}
+
+function drawBoard() {
+  if (playMode === "online" && onlineRole !== "idle") {
+    // Online state applied via applyOnlineState
+    return;
+  }
+  drawBoardFrom(game.getBoard(), game.getLastMove());
+}
+
 function updateChrome() {
+  if (playMode === "online") {
+    localToolbar.hidden = true;
+    return;
+  }
+  localToolbar.hidden = false;
   const labels = {
     pvp: "雙人輪流",
     ai: "人機對弈（您執黑）",
@@ -154,12 +200,11 @@ function updateChrome() {
   startAiVsAiBtn.disabled = thinking && mode !== "aivsai";
 }
 
-function setStatus(message, tone = "") {
-  gameStatus.textContent = message;
-  gameStatus.dataset.tone = tone;
-}
-
 function refreshStatus() {
+  if (playMode === "online") {
+    refreshOnlineStatusText();
+    return;
+  }
   if (game.isGameOver()) {
     const w = game.getWinner();
     if (w === 0) setStatus("平局！棋盤已滿。", "draw");
@@ -203,7 +248,7 @@ function placeStone(x, y) {
   if (game.isGameOver() || thinking) return false;
   if (!game.makeMove(x, y)) return false;
 
-  drawBoard();
+  drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
 
@@ -246,7 +291,7 @@ function startHumanAi() {
   mode = "ai";
   game.reset();
   thinking = false;
-  drawBoard();
+  drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
 }
@@ -256,7 +301,7 @@ function startPvp() {
   mode = "pvp";
   game.reset();
   thinking = false;
-  drawBoard();
+  drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
 }
@@ -290,7 +335,6 @@ function toggleAiVsAi() {
     return;
   }
 
-  // Resume an in-progress AI vs AI game; otherwise start fresh.
   const resume =
     mode === "aivsai" && !game.isGameOver() && game.getLastMove() != null;
 
@@ -298,7 +342,7 @@ function toggleAiVsAi() {
   thinking = false;
   if (!resume) {
     game.reset();
-    drawBoard();
+    drawBoardFrom(game.getBoard(), game.getLastMove());
   }
   updateChrome();
   refreshStatus();
@@ -312,29 +356,490 @@ function restartGame() {
   thinking = false;
   game.reset();
   if (mode === "aivsai") mode = "pvp";
-  drawBoard();
+  drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
+}
+
+/* ——— Online (gomoku.v1) ——— */
+
+async function shell(path, init) {
+  const res = await fetch("/api/shell/session" + path, init);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || data.code || res.statusText);
+    err.code = data.code;
+    throw err;
+  }
+  return data;
+}
+
+async function domain(path, init) {
+  const res = await fetch(path, init);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || data.code || res.statusText);
+    err.code = data.code;
+    throw err;
+  }
+  return data;
+}
+
+/** Host UI acts must go through shell so Roster peers get event fanout. */
+async function hostDomain(path, init) {
+  const method = (init && init.method) || "GET";
+  const headers = (init && init.headers) || undefined;
+  const body = init && typeof init.body === "string" ? init.body : undefined;
+  return shell("/host-domain", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, method, headers, body }),
+  });
+}
+
+function applyEventToOnlineBoard(event) {
+  if (!event || typeof event !== "object") return;
+  const type = String(event.type || "");
+  if (type === "match.started") {
+    onlineStatus = "active";
+    window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
+      Array(BOARD_SIZE).fill(null),
+    );
+    drawBoardFrom(window.__gomokuOnlineBoard, null);
+    turnDisplay.textContent = "黑棋";
+    refreshOnlineStatusText();
+    syncOnlineControls();
+    return;
+  }
+  if (type === "match.status") {
+    onlineStatus = event.status || onlineStatus;
+    refreshOnlineStatusText();
+    syncOnlineControls();
+    return;
+  }
+  if (type === "match.placed") {
+    const row = Number(event.row);
+    const col = Number(event.col);
+    const stone = event.stone === "white" ? 2 : 1;
+    if (!window.__gomokuOnlineBoard) {
+      window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
+        Array(BOARD_SIZE).fill(null),
+      );
+    }
+    const board = window.__gomokuOnlineBoard;
+    if (
+      Number.isInteger(row) &&
+      Number.isInteger(col) &&
+      row >= 0 &&
+      col >= 0 &&
+      row < BOARD_SIZE &&
+      col < BOARD_SIZE
+    ) {
+      board[row][col] = stone;
+    }
+    onlineStatus = event.status || onlineStatus;
+    const last = { x: col, y: row, player: stone };
+    drawBoardFrom(board, last);
+    turnDisplay.textContent =
+      event.turn === "white" ? "白棋" : event.turn === "black" ? "黑棋" : "—";
+    if (event.winner === 1 || event.winner === 2 || event.winner === 0) {
+      onlineStatus = "ended";
+    }
+    refreshOnlineStatusText();
+    syncOnlineControls();
+  }
+}
+
+function bindSessionChannel(channelName) {
+  if (!channelName) return;
+  if (sessionChannel) {
+    try {
+      sessionChannel.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  sessionChannel = new BroadcastChannel(channelName);
+  sessionChannel.onmessage = (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.type !== "session-event") return;
+    if (typeof msg.seq === "number" && msg.seq <= lastSeq) return;
+    lastSeq = msg.seq || lastSeq;
+    if (onlineRole === "player") {
+      applyEventToOnlineBoard(msg.event);
+      return;
+    }
+    void loadOnlineState().catch(() => {});
+  };
+}
+
+function applyOnlineState(state) {
+  if (!state) return;
+  onlineStatus = state.status || "waiting";
+  const board = Array.isArray(state.board) ? state.board : null;
+  if (board) {
+    window.__gomokuOnlineBoard = board.map((row) => row.slice());
+    drawBoardFrom(window.__gomokuOnlineBoard, state.lastMove || null);
+  }
+  turnDisplay.textContent =
+    onlineStatus === "active"
+      ? state.turn === "white"
+        ? "白棋"
+        : "黑棋"
+      : "—";
+  refreshOnlineStatusText();
+  syncOnlineControls();
+}
+
+function refreshOnlineStatusText() {
+  if (onlineRole === "player") {
+    if (onlineStatus === "waiting" || onlineStatus === "ready") {
+      setStatus("已入座 — 等待主持按「開始」");
+      return;
+    }
+  }
+  if (onlineStatus === "waiting") {
+    setStatus("等候對手加入…（可分享短網址）");
+  } else if (onlineStatus === "ready") {
+    setStatus(
+      onlineRole === "host"
+        ? "對手已入座 — 按「開始」開局（你執黑）"
+        : "已入座 — 等待主持開始",
+    );
+  } else if (onlineStatus === "active") {
+    const mine =
+      myOnlineStone === 1 ? "black" : myOnlineStone === 2 ? "white" : null;
+    const turn = turnDisplay.textContent.includes("白") ? "white" : "black";
+    if (mine && turn === mine) setStatus("輪到你，請落子。");
+    else setStatus("等待對手落子…");
+  } else if (onlineStatus === "ended") {
+    setStatus("這一局已結束。可結束這一場後重新邀請。", "draw");
+  }
+}
+
+function syncOnlineControls() {
+  const hosting = onlineRole === "host";
+  btnOpenSession.disabled = hosting;
+  btnInvite.disabled = !hosting;
+  btnCloseSession.disabled = !hosting;
+  btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
+  if (onlineRole === "player") {
+    onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · 你執白`;
+    btnOpenSession.hidden = true;
+    btnInvite.hidden = true;
+    btnStartMatch.hidden = true;
+    btnCloseSession.hidden = true;
+  } else if (hosting) {
+    onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus}`;
+    btnOpenSession.hidden = false;
+    btnInvite.hidden = false;
+    btnStartMatch.hidden = false;
+    btnCloseSession.hidden = false;
+  } else {
+    onlineMeta.textContent = "尚未開啟邀請場";
+    btnOpenSession.hidden = false;
+    btnInvite.hidden = false;
+    btnStartMatch.hidden = false;
+    btnCloseSession.hidden = false;
+  }
+}
+
+async function loadOnlineState() {
+  if (onlineRole === "player") {
+    const state = await domain("/api/session/state");
+    if (typeof state.seq === "number") lastSeq = Math.max(lastSeq, state.seq);
+    if (state.channelName) bindSessionChannel(state.channelName);
+    applyOnlineState(state);
+    return state;
+  }
+  const state = await hostDomain("/api/session/state", { method: "GET" });
+  if (typeof state.seq === "number") lastSeq = Math.max(lastSeq, state.seq);
+  if (state.channelName) bindSessionChannel(state.channelName);
+  applyOnlineState(state);
+  return state;
+}
+
+async function syncPlayerPresence() {
+  if (onlineRole !== "host") return;
+  try {
+    const st = await shell("/status");
+    const hasPlayer = (st.seats || []).some((s) => s.role === "player");
+    const data = await hostDomain("/api/session/presence", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ playerSeated: hasPlayer }),
+    });
+    applyOnlineState(data.state);
+  } catch {
+    /* ignore poll errors */
+  }
+}
+
+function startSeatPoll() {
+  stopSeatPoll();
+  seatPollTimer = setInterval(() => {
+    void syncPlayerPresence();
+  }, 2000);
+}
+
+function stopSeatPoll() {
+  if (seatPollTimer) {
+    clearInterval(seatPollTimer);
+    seatPollTimer = null;
+  }
+}
+
+async function onOpenSession() {
+  setStatus("開啟通道…");
+  try {
+    stopAiVsAi();
+    const opened = await shell("/open", { method: "POST" });
+    onlineRole = "host";
+    myOnlineStone = 1;
+    lastSeq = 0;
+    bindSessionChannel(opened.channelName);
+    await loadOnlineState();
+    startSeatPoll();
+    syncOnlineControls();
+    setStatus("已開場 — 按「邀請對手」取得短網址");
+  } catch (e) {
+    setStatus(String(e.message || e), "danger");
+  }
+}
+
+async function onInviteOpponent() {
+  setStatus("建立邀請…");
+  try {
+    const created = await fetch("/api/shell/platform/invite", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "invite.compose",
+        intent: {
+          version: 1,
+          sam: {
+            source: GOMOKU_SOURCE,
+            resolve: "install_if_missing",
+            presentation: "maximize_preview",
+          },
+          session: {
+            protocol: gomokuProtocolSpec(),
+            role: "player",
+            consent: "always_ask",
+          },
+          transport: { roster: { signal: true } },
+        },
+      }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.error || data.code || res.statusText);
+        err.code = data.code;
+        throw err;
+      }
+      return data;
+    });
+    inviteUrlInput.value = created.short_url || created.deep_link || "";
+    inviteBox.hidden = false;
+    setStatus("已建立短網址 — 分享給對手；保持本頁在線");
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (/not_provisioned|通行證|登入我的遊樂場/i.test(msg)) {
+      setStatus(
+        "尚未登入遊樂場通行證 — 請先到後台按「登入我的遊樂場」",
+        "danger",
+      );
+    } else {
+      setStatus(msg, "danger");
+    }
+  }
+}
+
+async function onStartMatch() {
+  setStatus("開始中…");
+  try {
+    const data = await hostDomain("/api/session/act", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        role: "host",
+        payload: { type: "start" },
+      }),
+    });
+    applyOnlineState(data.state);
+    setStatus("已開局 — 你執黑，請落子");
+  } catch (e) {
+    setStatus(String(e.message || e), "danger");
+  }
+}
+
+async function onCloseSession() {
+  try {
+    stopSeatPoll();
+    await shell("/close", { method: "POST" });
+    if (sessionChannel) {
+      try {
+        sessionChannel.close();
+      } catch {
+        /* ignore */
+      }
+      sessionChannel = null;
+    }
+    onlineRole = "idle";
+    myOnlineStone = null;
+    onlineStatus = "waiting";
+    inviteBox.hidden = true;
+    inviteUrlInput.value = "";
+    drawBoardFrom(game.getBoard(), null);
+    syncOnlineControls();
+    setStatus("已結束邀請場");
+  } catch (e) {
+    setStatus(String(e.message || e), "danger");
+  }
+}
+
+async function onlinePlace(row, col) {
+  if (onlineRole === "host") {
+    const data = await hostDomain("/api/session/act", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        role: "host",
+        payload: { type: "place", row, col },
+      }),
+    });
+    applyOnlineState(data.state);
+    return;
+  }
+  const data = await domain("/api/session/act", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "place",
+      row,
+      col,
+    }),
+  });
+  applyOnlineState(data.state || data);
+}
+
+async function tryBootAsPlayer() {
+  try {
+    const seat = await domain("/api/session/seat");
+    if (!seat || seat.ready === false) return false;
+    const role = String(seat.role || "");
+    if (role !== "player" && role !== "host") return false;
+    playMode = "online";
+    onlineRole = role === "host" ? "host" : "player";
+    myOnlineStone = onlineRole === "host" ? 1 : 2;
+    onlinePanel.hidden = false;
+    modeLocalBtn.classList.toggle("is-active", false);
+    modeOnlineBtn.classList.toggle("is-active", true);
+    localToolbar.hidden = true;
+    const ch = await domain("/api/session/channel");
+    if (ch?.name) bindSessionChannel(ch.name);
+    await loadOnlineState();
+    syncOnlineControls();
+    setStatus(
+      onlineRole === "player"
+        ? "已入座 — 等待主持按「開始」"
+        : "主持席已就緒",
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setPlayMode(next) {
+  if (next === playMode) return;
+  if (next === "local") {
+    stopSeatPoll();
+    playMode = "local";
+    onlinePanel.hidden = true;
+    modeLocalBtn.classList.add("is-active");
+    modeOnlineBtn.classList.remove("is-active");
+    localToolbar.hidden = false;
+    if (onlineRole === "host") {
+      void onCloseSession();
+    } else {
+      onlineRole = "idle";
+    }
+    drawBoardFrom(game.getBoard(), game.getLastMove());
+    updateChrome();
+    refreshStatus();
+    return;
+  }
+  stopAiVsAi();
+  playMode = "online";
+  onlinePanel.hidden = false;
+  modeLocalBtn.classList.remove("is-active");
+  modeOnlineBtn.classList.add("is-active");
+  localToolbar.hidden = true;
+  syncOnlineControls();
+  drawBoardFrom(
+    Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null)),
+    null,
+  );
+  setStatus("按「開場等候」後再邀請對手");
 }
 
 startAiBtn.addEventListener("click", toggleAiMode);
 startAiVsAiBtn.addEventListener("click", toggleAiVsAi);
 resetBtn.addEventListener("click", restartGame);
+modeLocalBtn.addEventListener("click", () => setPlayMode("local"));
+modeOnlineBtn.addEventListener("click", () => setPlayMode("online"));
+btnOpenSession.addEventListener("click", () => void onOpenSession());
+btnInvite.addEventListener("click", () => void onInviteOpponent());
+btnStartMatch.addEventListener("click", () => void onStartMatch());
+btnCloseSession.addEventListener("click", () => void onCloseSession());
+btnCopyInvite.addEventListener("click", async () => {
+  const v = inviteUrlInput.value.trim();
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    setStatus("已複製短網址");
+  } catch {
+    inviteUrlInput.select();
+    setStatus("請手動複製短網址");
+  }
+});
 
 canvas.addEventListener("click", (e) => {
+  const cell = eventToCell(e);
+  if (!cell) return;
+
+  if (playMode === "online") {
+    if (onlineStatus !== "active") return;
+    const stone = myOnlineStone;
+    if (!stone) return;
+    const turnIsBlack = turnDisplay.textContent.includes("黑");
+    if (stone === 1 && !turnIsBlack) return;
+    if (stone === 2 && turnIsBlack) return;
+    void onlinePlace(cell.y, cell.x).catch((err) =>
+      setStatus(String(err.message || err), "danger"),
+    );
+    return;
+  }
+
   if (mode === "aivsai") return;
   if (mode === "ai" && game.getCurrentPlayer() === 2) return;
   if (game.isGameOver() || thinking) return;
-  const cell = eventToCell(e);
-  if (!cell) return;
   placeStone(cell.x, cell.y);
 });
 
 window
   .matchMedia("(prefers-color-scheme: dark)")
-  .addEventListener("change", () => drawBoard());
+  .addEventListener("change", () => {
+    if (playMode === "local") {
+      drawBoardFrom(game.getBoard(), game.getLastMove());
+    } else {
+      void loadOnlineState().catch(() => {});
+    }
+  });
 
 syncCanvasBackingStore();
-drawBoard();
+drawBoardFrom(game.getBoard(), game.getLastMove());
 updateChrome();
 refreshStatus();
+void tryBootAsPlayer();

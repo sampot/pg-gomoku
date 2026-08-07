@@ -6,7 +6,11 @@
     <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
-      content="瀏覽器五子棋：雙人、人機、AI 對 AI。可於 Playgrounds 當 SAM 開啟。"
+      content="瀏覽器五子棋：雙人、人機、AI 對 AI；亦可邀請遠端對手（gomoku.v1）。"
+    />
+    <meta
+      name="sam:protocol"
+      content="gomoku.v1:host+player"
     />
     <title>五子棋</title>
     <link rel="stylesheet" href="./styles.css" />
@@ -15,10 +19,54 @@
     <main>
       <header class="hero">
         <h1>五子棋</h1>
-        <p class="tagline">連成五子即勝 · 支援雙人／人機／AI 對 AI</p>
+        <p class="tagline">連成五子即勝 · 本機或邀請對手</p>
       </header>
 
-      <section class="toolbar" aria-label="對局控制">
+      <section class="play-mode" aria-label="遊玩方式">
+        <button type="button" id="mode-local" class="mode-btn is-active">
+          本機
+        </button>
+        <button type="button" id="mode-online" class="mode-btn">
+          邀請對弈
+        </button>
+      </section>
+
+      <section
+        id="online-panel"
+        class="online-panel"
+        hidden
+        aria-label="邀請對弈"
+      >
+        <p id="online-meta" class="muted">尚未開啟邀請場</p>
+        <div class="controls online-controls">
+          <button type="button" id="btn-open-session" class="primary">
+            開場等候
+          </button>
+          <button type="button" id="btn-invite" class="primary" disabled>
+            邀請對手
+          </button>
+          <button type="button" id="btn-start-match" class="primary" disabled>
+            開始
+          </button>
+          <button type="button" id="btn-close-session" class="secondary" disabled>
+            結束這一場
+          </button>
+        </div>
+        <div id="invite-box" class="invite-box" hidden>
+          <label class="invite-label" for="invite-url">短網址</label>
+          <div class="invite-row">
+            <input id="invite-url" type="text" readonly />
+            <button type="button" id="btn-copy-invite" class="secondary">
+              複製
+            </button>
+          </div>
+          <p class="hint muted">
+            對手無需註冊。你須已「登入我的遊樂場」。入座後按「開始」才開局。
+          </p>
+        </div>
+      </section>
+
+      <section id="local-toolbar" class="toolbar" aria-label="對局控制">
         <div class="meta">
           <p>
             模式：<strong id="mode-label">雙人輪流</strong>

@@ -41,15 +41,26 @@ python3 -m http.server 8080
 
 規則：先連成五子者勝；棋盤滿且無人勝則平局。無禁手。
 
+## 邀請對弈（Playgrounds）
+
+在遊樂場開啟本 SAM 後切到 **邀請對弈**：
+
+1. Host（已在後台「登入我的遊樂場」）按 **開場等候** → **邀請對手**，分享短網址。
+2. Guest（無需註冊）開短連結 → 同意入座。
+3. Host 見對手入座後按 **開始** 才開局（Host 黑／Guest 白）。
+
+Session protocol：`gomoku.v1`（見 [PG-INVITE-E2E-MVP](https://github.com/sampot/playgrounds/blob/main/docs/PG-INVITE-E2E-MVP.md)）。
+
 ## 檔案
 
 | 檔案 | 說明 |
 | --- | --- |
-| `index.html` | 頁面結構 |
+| `index.html` | 頁面結構；`sam:protocol` |
 | `styles.css` | 亮／暗色主題與版面 |
-| `app.js` | Canvas 繪製、輸入、三種模式 |
+| `app.js` | Canvas、本機三種模式、邀請對弈 UI |
 | `gomoku.js` | 棋盤、勝負、評分 AI |
-| `functions.js` | Playgrounds 可選 stub |
+| `protocol.js` | `gomoku.v1` 常數 |
+| `functions.js` | Host session domain（meta／act／state） |
 
 ## License
 

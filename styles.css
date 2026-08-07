@@ -198,3 +198,112 @@ button:disabled {
 .status[data-tone="draw"] {
   background: var(--accent-soft);
 }
+
+.status[data-tone="danger"] {
+  background: color-mix(in oklab, var(--danger) 14%, var(--panel));
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
+}
+
+.play-mode {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.mode-btn {
+  min-height: 2.75rem;
+  min-width: 6.5rem;
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: var(--line);
+  font-weight: 650;
+}
+
+.mode-btn.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.online-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+}
+
+.online-panel[hidden] {
+  display: none;
+}
+
+.online-panel .muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+}
+
+.online-controls .primary {
+  min-height: 2.75rem;
+}
+
+.invite-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.invite-box[hidden] {
+  display: none;
+}
+
+.invite-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+}
+
+.invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.invite-row input {
+  flex: 1 1 12rem;
+  min-height: 2.75rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+@media (min-width: 40rem) {
+  .toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
