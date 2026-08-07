@@ -413,12 +413,17 @@ function applyEventToOnlineBoard(event) {
     return;
   }
   if (type === "match.reset") {
-    onlineStatus = event.status || "ready";
+    onlineStatus = event.status || "active";
     window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
       Array(BOARD_SIZE).fill(null),
     );
     drawBoardFrom(window.__gomokuOnlineBoard, null);
-    turnDisplay.textContent = "—";
+    turnDisplay.textContent =
+      onlineStatus === "active"
+        ? event.turn === "white"
+          ? "白棋"
+          : "黑棋"
+        : "—";
     refreshOnlineStatusText();
     syncOnlineControls();
     return;
@@ -555,7 +560,7 @@ function refreshOnlineStatusText() {
     else setStatus("等待對手落子…");
   } else if (onlineStatus === "ended") {
     if (onlineRole === "host") {
-      setStatus("這一局已結束。按「再來一局」清空棋盤，再按「開始」。", "draw");
+      setStatus("這一局已結束。按「再來一局」立刻開下一局。", "draw");
     } else {
       setStatus("這一局已結束。等待主持再來一局…", "draw");
     }
@@ -723,7 +728,7 @@ async function onStartMatch() {
 }
 
 async function onRematch() {
-  setStatus("準備下一局…");
+  setStatus("開下一局…");
   try {
     const data = await hostDomain("/api/session/act", {
       method: "POST",
@@ -734,11 +739,11 @@ async function onRematch() {
       }),
     });
     applyOnlineState(data.state);
-    setStatus(
-      onlineStatus === "ready"
-        ? "棋盤已清空 — 按「開始」開下一局（仍同一場連線）"
-        : "棋盤已清空 — 等候對手入座",
-    );
+    if (onlineStatus === "active") {
+      setStatus("已開下一局 — 你執黑，請落子");
+    } else {
+      setStatus("棋盤已清空 — 等候對手入座");
+    }
   } catch (e) {
     setStatus(String(e.message || e), "danger");
   }

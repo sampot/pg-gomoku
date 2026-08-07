@@ -306,23 +306,36 @@ export default {
         if (store.status !== "ended") {
           return err("act_rejected", "僅在終局後可再來一局");
         }
-        // Same session + seats: clear the match domain only (not Platform／Roster).
+        // Same session + seats: clear match and start next game immediately
+        // (no second「開始」). If opponent left, fall back to waiting.
         store.board = emptyBoard();
         store.turn = "black";
         store.winner = null;
         store.lastMove = null;
-        store.status = store.playerSeated ? "ready" : "waiting";
+        store.status = store.playerSeated ? "active" : "waiting";
         store.seq += 1;
         await saveStore(env, store);
-        const event = {
-          type: "match.reset",
-          status: store.status,
-          playerSeated: store.playerSeated,
-          seq: store.seq,
-        };
+        const events = [
+          {
+            type: "match.reset",
+            status: store.status,
+            turn: store.turn,
+            playerSeated: store.playerSeated,
+            seq: store.seq,
+          },
+        ];
+        if (store.status === "active") {
+          events.push({
+            type: "match.started",
+            status: store.status,
+            turn: store.turn,
+            seq: store.seq,
+            rematch: true,
+          });
+        }
         return json({
           ok: true,
-          events: [event],
+          events,
           state: publicState(store),
           seq: store.seq,
           sessionId: store.sessionId,

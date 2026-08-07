@@ -30,7 +30,7 @@ export function gomokuProtocolSpec() {
       {
         type: "reset",
         roles: ["host"],
-        note: "ended → ready|waiting；同 session／席位，不重連",
+        note: "ended → active（席仍在則直接開下一局）或 waiting；同 session／席位",
       },
     ],
   };
