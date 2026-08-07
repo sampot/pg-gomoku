@@ -47,6 +47,7 @@ const onlineMeta = document.getElementById("online-meta");
 const btnOpenSession = document.getElementById("btn-open-session");
 const btnInvite = document.getElementById("btn-invite");
 const btnStartMatch = document.getElementById("btn-start-match");
+const btnRematch = document.getElementById("btn-rematch");
 const btnCloseSession = document.getElementById("btn-close-session");
 const inviteBox = document.getElementById("invite-box");
 const inviteUrlInput = document.getElementById("invite-url");
@@ -411,6 +412,17 @@ function applyEventToOnlineBoard(event) {
     syncOnlineControls();
     return;
   }
+  if (type === "match.reset") {
+    onlineStatus = event.status || "ready";
+    window.__gomokuOnlineBoard = Array.from({ length: BOARD_SIZE }, () =>
+      Array(BOARD_SIZE).fill(null),
+    );
+    drawBoardFrom(window.__gomokuOnlineBoard, null);
+    turnDisplay.textContent = "—";
+    refreshOnlineStatusText();
+    syncOnlineControls();
+    return;
+  }
   if (type === "match.status") {
     onlineStatus = event.status || onlineStatus;
     refreshOnlineStatusText();
@@ -513,7 +525,11 @@ function refreshOnlineStatusText() {
     if (mine && turn === mine) setStatus("輪到你，請落子。");
     else setStatus("等待對手落子…");
   } else if (onlineStatus === "ended") {
-    setStatus("這一局已結束。可結束這一場後重新邀請。", "draw");
+    if (onlineRole === "host") {
+      setStatus("這一局已結束。按「再來一局」清空棋盤，再按「開始」。", "draw");
+    } else {
+      setStatus("這一局已結束。等待主持再來一局…", "draw");
+    }
   }
 }
 
@@ -523,23 +539,27 @@ function syncOnlineControls() {
   btnInvite.disabled = !hosting;
   btnCloseSession.disabled = !hosting;
   btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
+  btnRematch.disabled = !(hosting && onlineStatus === "ended");
   if (onlineRole === "player") {
     onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · 你執白`;
     btnOpenSession.hidden = true;
     btnInvite.hidden = true;
     btnStartMatch.hidden = true;
+    btnRematch.hidden = true;
     btnCloseSession.hidden = true;
   } else if (hosting) {
     onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus}`;
     btnOpenSession.hidden = false;
     btnInvite.hidden = false;
-    btnStartMatch.hidden = false;
+    btnStartMatch.hidden = onlineStatus === "ended";
+    btnRematch.hidden = onlineStatus !== "ended";
     btnCloseSession.hidden = false;
   } else {
     onlineMeta.textContent = "尚未開啟邀請場";
     btnOpenSession.hidden = false;
     btnInvite.hidden = false;
     btnStartMatch.hidden = false;
+    btnRematch.hidden = true;
     btnCloseSession.hidden = false;
   }
 }
@@ -673,6 +693,28 @@ async function onStartMatch() {
   }
 }
 
+async function onRematch() {
+  setStatus("準備下一局…");
+  try {
+    const data = await hostDomain("/api/session/act", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        role: "host",
+        payload: { type: "reset" },
+      }),
+    });
+    applyOnlineState(data.state);
+    setStatus(
+      onlineStatus === "ready"
+        ? "棋盤已清空 — 按「開始」開下一局（仍同一場連線）"
+        : "棋盤已清空 — 等候對手入座",
+    );
+  } catch (e) {
+    setStatus(String(e.message || e), "danger");
+  }
+}
+
 async function onCloseSession() {
   try {
     stopSeatPoll();
@@ -792,6 +834,7 @@ modeOnlineBtn.addEventListener("click", () => setPlayMode("online"));
 btnOpenSession.addEventListener("click", () => void onOpenSession());
 btnInvite.addEventListener("click", () => void onInviteOpponent());
 btnStartMatch.addEventListener("click", () => void onStartMatch());
+btnRematch.addEventListener("click", () => void onRematch());
 btnCloseSession.addEventListener("click", () => void onCloseSession());
 btnCopyInvite.addEventListener("click", async () => {
   const v = inviteUrlInput.value.trim();

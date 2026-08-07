@@ -271,7 +271,9 @@ export default {
             "act_rejected",
             store.status === "waiting"
               ? "對手尚未入座"
-              : "目前無法開始",
+              : store.status === "ended"
+                ? "請先「再來一局」再開始"
+                : "目前無法開始",
           );
         }
         store.status = "active";
@@ -285,6 +287,37 @@ export default {
           type: "match.started",
           status: store.status,
           turn: store.turn,
+          seq: store.seq,
+        };
+        return json({
+          ok: true,
+          events: [event],
+          state: publicState(store),
+          seq: store.seq,
+          sessionId: store.sessionId,
+          channelName: store.channelName,
+        });
+      }
+
+      if (type === "reset") {
+        if (role !== "host") {
+          return err("role_forbidden", "僅主持可再來一局");
+        }
+        if (store.status !== "ended") {
+          return err("act_rejected", "僅在終局後可再來一局");
+        }
+        // Same session + seats: clear the match domain only (not Platform／Roster).
+        store.board = emptyBoard();
+        store.turn = "black";
+        store.winner = null;
+        store.lastMove = null;
+        store.status = store.playerSeated ? "ready" : "waiting";
+        store.seq += 1;
+        await saveStore(env, store);
+        const event = {
+          type: "match.reset",
+          status: store.status,
+          playerSeated: store.playerSeated,
           seq: store.seq,
         };
         return json({
@@ -346,7 +379,7 @@ export default {
         });
       }
 
-      return err("act_rejected", "未知 act（需要 start 或 place）");
+      return err("act_rejected", "未知 act（需要 start、place 或 reset）");
     }
 
     return json({

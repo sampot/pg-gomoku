@@ -18,7 +18,7 @@ export function gomokuProtocolSpec() {
     roles: [...GOMOKU_ROLES],
     roleLimits: { ...GOMOKU_ROLE_LIMITS },
     joinPolicy: GOMOKU_JOIN_POLICY,
-    capabilities: ["start", "place"],
+    capabilities: ["start", "place", "reset"],
     boardSize: GOMOKU_BOARD_SIZE,
     acts: [
       { type: "start", roles: ["host"] },
@@ -26,6 +26,11 @@ export function gomokuProtocolSpec() {
         type: "place",
         roles: ["host", "player"],
         payload: { row: "0..14", col: "0..14" },
+      },
+      {
+        type: "reset",
+        roles: ["host"],
+        note: "ended → ready|waiting；同 session／席位，不重連",
       },
     ],
   };
