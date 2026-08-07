@@ -857,7 +857,7 @@ function setPlayMode(next) {
     Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null)),
     null,
   );
-  setStatus("按「開場等候」後再邀請對手");
+  setStatus("按「開場」後再邀請對手");
 }
 
 startAiBtn.addEventListener("click", toggleAiMode);
