@@ -92,6 +92,12 @@ main {
   border-radius: 0.85rem;
 }
 
+/* Author `display:flex` would otherwise override the hidden attribute. */
+.toolbar[hidden],
+#local-ai-controls[hidden] {
+  display: none;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;

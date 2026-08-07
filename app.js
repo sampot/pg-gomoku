@@ -40,6 +40,7 @@ const startAiBtn = document.getElementById("start-ai");
 const startAiVsAiBtn = document.getElementById("start-ai-vs-ai");
 const resetBtn = document.getElementById("reset-game");
 const localToolbar = document.getElementById("local-toolbar");
+const localAiControls = document.getElementById("local-ai-controls");
 const onlinePanel = document.getElementById("online-panel");
 const modeLocalBtn = document.getElementById("mode-local");
 const modeOnlineBtn = document.getElementById("mode-online");
@@ -173,10 +174,14 @@ function drawBoard() {
 
 function updateChrome() {
   if (playMode === "online") {
-    localToolbar.hidden = true;
+    // Keep turn meta; hide local AI／重新開始 (邀請對弈 unrelated).
+    localToolbar.hidden = false;
+    localAiControls.hidden = true;
+    modeLabel.textContent = "邀請對弈";
     return;
   }
   localToolbar.hidden = false;
+  localAiControls.hidden = false;
   const labels = {
     pvp: "雙人輪流",
     ai: "人機對弈（您執黑）",
@@ -811,7 +816,7 @@ async function tryBootAsPlayer() {
     onlinePanel.hidden = false;
     modeLocalBtn.classList.toggle("is-active", false);
     modeOnlineBtn.classList.toggle("is-active", true);
-    localToolbar.hidden = true;
+    updateChrome();
     const ch = await domain("/api/session/channel");
     if (ch?.name) bindSessionChannel(ch.name);
     await loadOnlineState();
@@ -835,7 +840,6 @@ function setPlayMode(next) {
     onlinePanel.hidden = true;
     modeLocalBtn.classList.add("is-active");
     modeOnlineBtn.classList.remove("is-active");
-    localToolbar.hidden = false;
     if (onlineRole === "host") {
       void onCloseSession();
     } else {
@@ -851,8 +855,8 @@ function setPlayMode(next) {
   onlinePanel.hidden = false;
   modeLocalBtn.classList.remove("is-active");
   modeOnlineBtn.classList.add("is-active");
-  localToolbar.hidden = true;
   syncOnlineControls();
+  updateChrome();
   drawBoardFrom(
     Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null)),
     null,
