@@ -423,6 +423,14 @@ function applyEventToOnlineBoard(event) {
     syncOnlineControls();
     return;
   }
+  if (type === "session.closed" || type === "match.closed") {
+    applyHostEndedSession(
+      event.reason === "host_closed"
+        ? "主持已結束這一場"
+        : "這一場已結束",
+    );
+    return;
+  }
   if (type === "match.status") {
     onlineStatus = event.status || onlineStatus;
     refreshOnlineStatusText();
@@ -483,6 +491,27 @@ function bindSessionChannel(channelName) {
     }
     void loadOnlineState().catch(() => {});
   };
+}
+
+/** Guest／local: Host closed the multiplayer session (keep board, leave online seat). */
+function applyHostEndedSession(message) {
+  stopSeatPoll();
+  if (sessionChannel) {
+    try {
+      sessionChannel.close();
+    } catch {
+      /* ignore */
+    }
+    sessionChannel = null;
+  }
+  const wasPlayer = onlineRole === "player";
+  onlineRole = "idle";
+  myOnlineStone = null;
+  onlineStatus = "waiting";
+  inviteBox.hidden = true;
+  inviteUrlInput.value = "";
+  syncOnlineControls();
+  setStatus(message, wasPlayer ? "danger" : "draw");
 }
 
 function applyOnlineState(state) {
