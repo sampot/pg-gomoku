@@ -94,7 +94,10 @@ main {
 
 /* Author `display:flex` would otherwise override the hidden attribute. */
 .toolbar[hidden],
-#local-ai-controls[hidden] {
+#local-ai-controls[hidden],
+.play-mode[hidden],
+.online-controls[hidden],
+.online-controls button[hidden] {
   display: none;
 }
 

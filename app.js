@@ -41,7 +41,9 @@ const startAiVsAiBtn = document.getElementById("start-ai-vs-ai");
 const resetBtn = document.getElementById("reset-game");
 const localToolbar = document.getElementById("local-toolbar");
 const localAiControls = document.getElementById("local-ai-controls");
+const playModeSection = document.getElementById("play-mode");
 const onlinePanel = document.getElementById("online-panel");
+const onlineControls = document.getElementById("online-controls");
 const modeLocalBtn = document.getElementById("mode-local");
 const modeOnlineBtn = document.getElementById("mode-online");
 const onlineMeta = document.getElementById("online-meta");
@@ -574,13 +576,18 @@ function refreshOnlineStatusText() {
 
 function syncOnlineControls() {
   const hosting = onlineRole === "host";
+  const asPlayer = onlineRole === "player";
   btnOpenSession.disabled = hosting;
   btnInvite.disabled = !hosting;
   btnCloseSession.disabled = !hosting;
   btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
   btnRematch.disabled = !(hosting && onlineStatus === "ended");
-  if (onlineRole === "player") {
+  // Invitee: play-first — hide mode switch + host CTAs (開場／邀請／開始…).
+  playModeSection.hidden = asPlayer;
+  onlineControls.hidden = asPlayer;
+  if (asPlayer) {
     onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · 你執白`;
+    inviteBox.hidden = true;
     btnOpenSession.hidden = true;
     btnInvite.hidden = true;
     btnStartMatch.hidden = true;
