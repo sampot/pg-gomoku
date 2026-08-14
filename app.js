@@ -20,6 +20,22 @@ let game = new GomokuGame(BOARD_SIZE);
 let aiVsAiTimer = null;
 let thinking = false;
 
+// 最高分（人機連勝）— 透過 Playgrounds SDK 的 `window.PG.kv` 直接寫入
+// 宿主內建的 `/api/kv` 路由（play 與 go 雙 shell 一致），持久化到 env.KV。
+// 不依賴 localStorage→KV shim，故無同步讀取 race、刷新不歸零、清分可重設。
+const HIGHSCORE_KEY = "pg-gomoku:highscore";
+let highScore = 0;
+let currentStreak = 0;
+let gameOverHandled = false;
+
+// 最高分（人機連勝）— 透過 Playgrounds SDK 的 `window.PG.kv` 直接寫入
+// 宿主內建的 `/api/kv` 路由（play 與 go 雙 shell 一致），持久化到 env.KV。
+// 不依賴 localStorage→KV shim，故無同步讀取 race、刷新不歸零、清分可重設。
+const HIGHSCORE_KEY = "pg-gomoku:highscore";
+let highScore = 0;
+let currentStreak = 0;
+let gameOverHandled = false;
+
 /** Online host／player */
 /** @type {'idle' | 'host' | 'player'} */
 let onlineRole = "idle";
@@ -41,6 +57,7 @@ const modeLabel = document.getElementById("mode-label");
 const startAiBtn = document.getElementById("start-ai");
 const startAiVsAiBtn = document.getElementById("start-ai-vs-ai");
 const resetBtn = document.getElementById("reset-game");
+const highScoreEl = document.getElementById("high-score");
 const localToolbar = document.getElementById("local-toolbar");
 const localAiControls = document.getElementById("local-ai-controls");
 const playModeSection = document.getElementById("play-mode");
@@ -259,6 +276,7 @@ function refreshStatus() {
     else if (mode === "aivsai")
       setStatus(`${playerName(w)}（AI）獲勝！`, w === 1 ? "black" : "white");
     else setStatus(`${playerName(w)}獲勝！`, w === 1 ? "black" : "white");
+    onGameOver();
     return;
   }
 
@@ -287,6 +305,64 @@ function stopAiVsAi() {
   if (aiVsAiTimer) {
     clearInterval(aiVsAiTimer);
     aiVsAiTimer = null;
+  }
+}
+
+// ─── 最高分（人機連勝），經 SDK `window.PG.kv` 寫入宿主 /api/kv ───
+
+function renderHighScore() {
+  if (highScoreEl) {
+    highScoreEl.textContent = String(highScore);
+  }
+}
+
+/** @returns {Promise<void>} */
+async function loadHighScore() {
+  try {
+    const pg = /** @type {any} */ (window).PG;
+    if (!pg || !pg.kv) return;
+    if (typeof pg.ready?.then === "function") {
+      await pg.ready;
+    }
+    const v = await pg.kv.get(HIGHSCORE_KEY);
+    const n = v == null ? 0 : Number(v);
+    highScore = Number.isFinite(n) && n > 0 ? n : 0;
+    renderHighScore();
+  } catch {
+    /* KV 不可用時靜默降級，不影響對弈 */
+  }
+}
+
+/** @returns {Promise<void>} */
+async function saveHighScore() {
+  try {
+    const pg = /** @type {any} */ (window).PG;
+    if (!pg || !pg.kv) return;
+    if (typeof pg.ready?.then === "function") {
+      await pg.ready;
+    }
+    await pg.kv.put(HIGHSCORE_KEY, String(highScore));
+  } catch {
+    /* 寫入失敗靜默降級 */
+  }
+}
+
+/** 一局結束時更新連勝與最高分（僅人機模式計分）。 */
+function onGameOver() {
+  if (gameOverHandled) return;
+  gameOverHandled = true;
+  if (mode !== "ai") return; // 只有「人機對弈」計連勝
+  const w = game.getWinner();
+  const playerWon = w === 1; // 人執黑（1）
+  if (playerWon) {
+    currentStreak += 1;
+    if (currentStreak > highScore) {
+      highScore = currentStreak;
+      renderHighScore();
+      void saveHighScore();
+    }
+  } else {
+    currentStreak = 0; // 敗或平局：連勝歸零
   }
 }
 
@@ -337,6 +413,8 @@ function startHumanAi() {
   mode = "ai";
   game.reset();
   thinking = false;
+  currentStreak = 0;
+  gameOverHandled = false;
   drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
@@ -347,6 +425,8 @@ function startPvp() {
   mode = "pvp";
   game.reset();
   thinking = false;
+  currentStreak = 0;
+  gameOverHandled = false;
   drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
@@ -402,6 +482,8 @@ function restartGame() {
   thinking = false;
   game.reset();
   if (mode === "aivsai") mode = "pvp";
+  currentStreak = 0;
+  gameOverHandled = false;
   drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
@@ -991,4 +1073,5 @@ syncCanvasBackingStore();
 drawBoardFrom(game.getBoard(), game.getLastMove());
 updateChrome();
 refreshStatus();
+void loadHighScore();
 void tryBootAsPlayer();

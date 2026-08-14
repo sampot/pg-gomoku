@@ -171,43 +171,12 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = request.method.toUpperCase();
 
-    // KV proxy routes (PG-UI-SDK-SPEC §4 / localStorage→KV shim).
-    // Let the host-installed default handler logic run so localStorage
-    // shim _hydrate/flush can read／write env.KV for games that persist
-    // user data (e.g. high scores).
-    const kvGetMatch = path.match(/^\/api\/kv\/(.+)$/);
-    if (kvGetMatch && env && env.KV) {
-      const key = decodeURIComponent(kvGetMatch[1]);
-      if (method === "GET") {
-        const v = await env.KV.get(key);
-        if (v == null) return new Response(null, { status: 404 });
-        return new Response(typeof v === "string" ? v : "", {
-          status: 200,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
-      }
-      if (method === "PUT") {
-        const body = await request.arrayBuffer();
-        await env.KV.put(key, body);
-        return new Response(null, { status: 204 });
-      }
-      if (method === "DELETE") {
-        await env.KV.delete(key);
-        return new Response(null, { status: 204 });
-      }
-    }
-    if (path === "/api/kv/list" && method === "POST" && env && env.KV) {
-      const body = await request.clone().json().catch(() => ({}));
-      const result = await env.KV.list({
-        prefix: body?.prefix,
-        cursor: body?.cursor,
-        limit: body?.limit,
-      });
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { "content-type": "application/json; charset=utf-8" },
-      });
-    }
+    // NOTE: `/api/kv/*` is provided by the host shell (play + go) as a
+    // built-in route, so SAMs must NOT re-implement it here. The
+    // localStorage→KV shim (PG-LOCALSTORAGE-SHIM-SPEC) relies on the shell
+    // owning `/api/kv/<key>` (GET/PUT/DELETE) + `/api/kv/list`, which is what
+    // persists user data such as high scores. This SAM keeps its own session
+    // state via the direct `env.KV` binding below (not HTTP).
 
     // Participant / homePeer seat: prefer env.SESSION tunnel (DEC-023／045).
     if (env?.SESSION) {
