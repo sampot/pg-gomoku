@@ -28,14 +28,6 @@ let highScore = 0;
 let currentStreak = 0;
 let gameOverHandled = false;
 
-// 最高分（人機連勝）— 透過 Playgrounds SDK 的 `window.PG.kv` 直接寫入
-// 宿主內建的 `/api/kv` 路由（play 與 go 雙 shell 一致），持久化到 env.KV。
-// 不依賴 localStorage→KV shim，故無同步讀取 race、刷新不歸零、清分可重設。
-const HIGHSCORE_KEY = "pg-gomoku:highscore";
-let highScore = 0;
-let currentStreak = 0;
-let gameOverHandled = false;
-
 /** Online host／player */
 /** @type {'idle' | 'host' | 'player'} */
 let onlineRole = "idle";
