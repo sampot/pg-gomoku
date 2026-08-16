@@ -645,7 +645,9 @@ function applyHostEndedSession(message) {
 function applyOnlineState(state) {
   if (!state) return;
   onlineStatus = state.status || "waiting";
-  if (state.firstRole) applyFirstRole(state.firstRole);
+  const shouldApplyFirstRole =
+    onlineRole !== "host" || onlineStatus === "active";
+  if (state.firstRole && shouldApplyFirstRole) applyFirstRole(state.firstRole);
   const board = Array.isArray(state.board) ? state.board : null;
   if (board) {
     window.__gomokuOnlineBoard = board.map((row) => row.slice());

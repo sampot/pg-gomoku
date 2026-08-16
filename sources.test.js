@@ -54,4 +54,12 @@ describe("browser modules", () => {
     expect(src).toMatch(/btnInvite\.disabled\s*=\s*!\(hosting\s*&&\s*canInvite\)/);
     expect(src).toMatch(/btnInvite\.hidden\s*=\s*!canInvite/);
   });
+
+  it("does not let pre-game polling overwrite the Host's first-player choice", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(
+      /const shouldApplyFirstRole\s*=\s*onlineRole !== "host" \|\| onlineStatus === "active"/,
+    );
+    expect(src).toMatch(/if \(state\.firstRole && shouldApplyFirstRole\)/);
+  });
 });
