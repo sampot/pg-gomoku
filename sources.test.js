@@ -72,4 +72,10 @@ describe("browser modules", () => {
       /async function onCloseSession\(\) \{[\s\S]*?applyHostEndedSession\("已結束邀請場"\)/,
     );
   });
+
+  it("shows the seated opponent display name on the Host status line", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(/opponentDisplayName/);
+    expect(src).toMatch(/\$\{opponentLabel\(\)\}已入座/);
+  });
 });

@@ -41,6 +41,12 @@ let currentPlatformInviteId = null;
 let myOnlineStone = /** @type {null | 1 | 2} */ (null);
 /** @type {"host" | "player"} */
 let onlineFirstRole = "host";
+/** Guest display name from `/api/online/status` seats (Host UI). */
+let opponentDisplayName = /** @type {string | null} */ (null);
+
+function opponentLabel() {
+  return opponentDisplayName || "對手";
+}
 
 const canvas = document.getElementById("game-board");
 const ctx = canvas.getContext("2d");
@@ -643,6 +649,7 @@ function applyHostEndedSession(message) {
   onlineRole = "idle";
   myOnlineStone = null;
   onlineFirstRole = "host";
+  opponentDisplayName = null;
   onlineStatus = "waiting";
   currentPlatformInviteId = null;
   inviteBox.hidden = true;
@@ -685,7 +692,7 @@ function refreshOnlineStatusText() {
   } else if (onlineStatus === "ready") {
     setStatus(
       onlineRole === "host"
-        ? "對手已入座 — 選誰先（執黑），再按「開始」"
+        ? `${opponentLabel()}已入座 — 選誰先（執黑），再按「開始」`
         : "已入座 — 等待主持開始",
     );
   } else if (onlineStatus === "active") {
@@ -693,7 +700,7 @@ function refreshOnlineStatusText() {
       myOnlineStone === 1 ? "black" : myOnlineStone === 2 ? "white" : null;
     const turn = turnDisplay.textContent.includes("白") ? "white" : "black";
     if (mine && turn === mine) setStatus(`輪到你（${stoneLabel(myOnlineStone)}），請落子。`);
-    else setStatus("等待對手落子…");
+    else setStatus(`等待${opponentLabel()}落子…`);
   } else if (onlineStatus === "ended") {
     if (onlineRole === "host") {
       setStatus("這一局已結束。可改先手後按「再來一局」。", "draw");
@@ -766,7 +773,13 @@ async function syncPlayerPresence() {
   if (onlineRole !== "host") return;
   try {
     const st = await online("/status");
-    const hasPlayer = (st.seats || []).some((s) => s.role === "player");
+    const playerSeat = (st.seats || []).find((s) => s.role === "player");
+    const hasPlayer = Boolean(playerSeat);
+    const seatName =
+      playerSeat && typeof playerSeat.name === "string"
+        ? playerSeat.name.trim()
+        : "";
+    if (seatName) opponentDisplayName = seatName;
     const data = await hostDomain("/api/session/presence", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -800,6 +813,7 @@ async function onOpenSession() {
     onlineRole = "host";
     onlineFirstRole = "host";
     myOnlineStone = null;
+    opponentDisplayName = null;
     setFirstRoleRadios("host");
     lastSeq = 0;
     bindSessionChannel(opened.channelName);
@@ -894,7 +908,7 @@ async function onStartMatch() {
     setStatus(
       myOnlineStone === 1
         ? `已開局 — 你執${mine}先手，請落子`
-        : `已開局 — 你執${mine}，等待對手先手`,
+        : `已開局 — 你執${mine}，等待${opponentLabel()}先手`,
     );
   } catch (e) {
     setStatus(String(e.message || e), "danger");
@@ -918,10 +932,10 @@ async function onRematch() {
       setStatus(
         myOnlineStone === 1
           ? `已開下一局 — 你執${stoneLabel(myOnlineStone)}先手，請落子`
-          : `已開下一局 — 你執${stoneLabel(myOnlineStone)}，等待對手先手`,
+          : `已開下一局 — 你執${stoneLabel(myOnlineStone)}，等待${opponentLabel()}先手`,
       );
     } else {
-      setStatus("棋盤已清空 — 等候對手入座");
+      setStatus(`棋盤已清空 — 等候${opponentLabel()}入座`);
     }
   } catch (e) {
     setStatus(String(e.message || e), "danger");
