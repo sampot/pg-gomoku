@@ -376,9 +376,15 @@ export default {
       const body = (await request.json().catch(() => null)) || {};
       const seated = Boolean(body.playerSeated);
       store.playerSeated = seated;
+      /** @type {string | undefined} */
+      let leaveReason;
       if (store.status === "waiting" && seated) store.status = "ready";
       if (store.status === "ready" && !seated) store.status = "waiting";
-      // Do not demote active/ended.
+      // 1v1：對弈中對手斷線／離席 → 這一局結束（不做重連）。
+      if (store.status === "active" && !seated) {
+        store.status = "ended";
+        leaveReason = "opponent_left";
+      }
       store.seq += 1;
       await saveStore(env, store);
       const event = {
@@ -386,6 +392,7 @@ export default {
         status: store.status,
         playerSeated: store.playerSeated,
         seq: store.seq,
+        ...(leaveReason ? { reason: leaveReason } : {}),
       };
       return json({
         ok: true,

@@ -566,6 +566,11 @@ function applyEventToOnlineBoard(event) {
   }
   if (type === "match.status") {
     onlineStatus = event.status || onlineStatus;
+    if (event.reason === "opponent_left" && onlineStatus === "ended") {
+      setStatus(`${opponentLabel()}已離開，這一局結束。`, "draw");
+      syncOnlineControls();
+      return;
+    }
     refreshOnlineStatusText();
     syncOnlineControls();
     return;

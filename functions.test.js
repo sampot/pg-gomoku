@@ -226,3 +226,82 @@ describe("functions.js Guest env.SESSION path (unchanged)", () => {
     expect(data.role).toBe("player");
   });
 });
+
+describe("functions.js /api/session/presence (1v1 disconnect)", () => {
+  /** @type {ReturnType<typeof mockKv>} */
+  let KV;
+
+  beforeEach(() => {
+    KV = mockKv();
+  });
+
+  async function seedActive() {
+    await KV.put(
+      "session:gomoku:v1",
+      JSON.stringify({
+        sessionId: "sess-live",
+        channelName: "playgrounds-session:sess-live",
+        status: "active",
+        turn: "black",
+        board: [],
+        winner: null,
+        lastMove: null,
+        playerSeated: true,
+        firstRole: "host",
+        seq: 5,
+      }),
+    );
+  }
+
+  it("ends an active match when the opponent unseats (disconnect)", async () => {
+    await seedActive();
+    const res = await handler.fetch(
+      jsonRequest("/api/session/presence", {
+        method: "POST",
+        body: { playerSeated: false, seats: [] },
+      }),
+      { KV },
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.state.status).toBe("ended");
+    expect(data.state.playerSeated).toBe(false);
+    expect(data.events[0]).toMatchObject({
+      type: "match.status",
+      status: "ended",
+      reason: "opponent_left",
+      playerSeated: false,
+    });
+    const stored = JSON.parse(await KV.get("session:gomoku:v1"));
+    expect(stored.status).toBe("ended");
+    expect(stored.playerSeated).toBe(false);
+  });
+
+  it("keeps ready→waiting when opponent leaves before start", async () => {
+    await KV.put(
+      "session:gomoku:v1",
+      JSON.stringify({
+        sessionId: "sess-ready",
+        channelName: "playgrounds-session:sess-ready",
+        status: "ready",
+        turn: "black",
+        board: [],
+        winner: null,
+        lastMove: null,
+        playerSeated: true,
+        firstRole: "host",
+        seq: 2,
+      }),
+    );
+    const res = await handler.fetch(
+      jsonRequest("/api/session/presence", {
+        method: "POST",
+        body: { playerSeated: false },
+      }),
+      { KV },
+    );
+    const data = await res.json();
+    expect(data.state.status).toBe("waiting");
+    expect(data.events[0].reason).toBeUndefined();
+  });
+});
