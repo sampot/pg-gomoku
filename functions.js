@@ -165,6 +165,103 @@ function resolveFirstRole(payload, store) {
   return fromPayload || store.firstRole || "host";
 }
 
+function hostUnavailable() {
+  return err("host_unavailable", "此環境未提供 env.HOST（無法邀請對弈）", 503);
+}
+
+function mapHostError(e) {
+  const code =
+    e && typeof e === "object" && "code" in e
+      ? String(e.code)
+      : /not_provisioned|通行證|登入/i.test(String(e?.message || e))
+        ? "not_provisioned"
+        : "error";
+  const status =
+    code === "not_provisioned"
+      ? 401
+      : code === "host_unavailable" || code === "session_inactive"
+        ? code === "session_inactive"
+          ? 409
+          : 503
+        : 400;
+  return err(code, e?.message || String(e), status);
+}
+
+/**
+ * UI Host routes (DEC-053): UI → `/api/online/*` → `env.HOST`.
+ * Domain authority remains `/api/session/*` + `env.KV`.
+ */
+async function handleOnlineHostApi(request, env, path, method) {
+  const HOST = env?.HOST;
+  if (!HOST) return hostUnavailable();
+
+  try {
+    if (path.endsWith("/api/online/open") && method === "POST") {
+      const opened = await HOST.openSession();
+      return json({
+        ok: true,
+        sessionId: opened.sessionId,
+        channelName: opened.channelName,
+        protocolId: opened.protocolId,
+        apiVersion: opened.apiVersion,
+        roles: opened.roles,
+      });
+    }
+
+    if (path.endsWith("/api/online/close") && method === "POST") {
+      await HOST.closeSession();
+      return json({ ok: true });
+    }
+
+    if (path.endsWith("/api/online/status") && method === "GET") {
+      const session = await HOST.getSession();
+      const seats = (await HOST.listSeats()) || [];
+      if (!session) {
+        return json({ active: false, seats: [] });
+      }
+      return json({
+        active: true,
+        status: session.status || "open",
+        sessionId: session.sessionId,
+        channelName: session.channelName,
+        protocolId: session.protocolId,
+        apiVersion: session.apiVersion,
+        roles: session.roles,
+        seats,
+      });
+    }
+
+    if (path.endsWith("/api/online/domain") && method === "POST") {
+      const body = (await request.json().catch(() => null)) || {};
+      const domainPath = String(body.path || "");
+      if (!domainPath.includes("/api/session/")) {
+        return err("forbidden", "僅允許轉發 /api/session/*", 403);
+      }
+      const result = await HOST.hostSessionFetch(domainPath, {
+        method: body.method || "GET",
+        headers: body.headers,
+        body: body.body,
+      });
+      return json(result);
+    }
+
+    if (path.endsWith("/api/online/invite") && method === "POST") {
+      const body = (await request.json().catch(() => ({}))) || {};
+      const created = await HOST.createPlatformInvite({
+        kind: body.kind,
+        intent: body.intent,
+        ttlMs: body.ttlMs,
+        targetField: body.targetField,
+      });
+      return json(created);
+    }
+
+    return null;
+  } catch (e) {
+    return mapHostError(e);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -177,6 +274,12 @@ export default {
     // owning `/api/kv/<key>` (GET/PUT/DELETE) + `/api/kv/list`, which is what
     // persists user data such as high scores. This SAM keeps its own session
     // state via the direct `env.KV` binding below (not HTTP).
+
+    // DEC-053 Host UI surface (play + go share env.HOST).
+    if (path.includes("/api/online/")) {
+      const onlineRes = await handleOnlineHostApi(request, env, path, method);
+      if (onlineRes) return onlineRes;
+    }
 
     // Participant / homePeer seat: prefer env.SESSION tunnel (DEC-023／045).
     if (env?.SESSION) {

@@ -481,10 +481,10 @@ function restartGame() {
   refreshStatus();
 }
 
-/* ——— Online (gomoku.v1) ——— */
+/* ——— Online (gomoku.v1) via DEC-053 /api/online/* → env.HOST ——— */
 
-async function shell(path, init) {
-  const res = await fetch("/api/shell/session" + path, init);
+async function online(path, init) {
+  const res = await fetch("/api/online" + path, init);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(data.error || data.code || res.statusText);
@@ -505,12 +505,12 @@ async function domain(path, init) {
   return data;
 }
 
-/** Host UI acts must go through shell so Roster peers get event fanout. */
+/** Host UI acts must go through online/domain so Roster peers get event fanout. */
 async function hostDomain(path, init) {
   const method = (init && init.method) || "GET";
   const headers = (init && init.headers) || undefined;
   const body = init && typeof init.body === "string" ? init.body : undefined;
-  return shell("/host-domain", {
+  return online("/domain", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path, method, headers, body }),
@@ -749,7 +749,7 @@ async function loadOnlineState() {
 async function syncPlayerPresence() {
   if (onlineRole !== "host") return;
   try {
-    const st = await shell("/status");
+    const st = await online("/status");
     const hasPlayer = (st.seats || []).some((s) => s.role === "player");
     const data = await hostDomain("/api/session/presence", {
       method: "POST",
@@ -780,7 +780,7 @@ async function onOpenSession() {
   setStatus("開啟通道…");
   try {
     stopAiVsAi();
-    const opened = await shell("/open", { method: "POST" });
+    const opened = await online("/open", { method: "POST" });
     onlineRole = "host";
     onlineFirstRole = "host";
     myOnlineStone = null;
@@ -799,7 +799,7 @@ async function onOpenSession() {
 async function onInviteOpponent() {
   setStatus("建立邀請…");
   try {
-    const created = await fetch("/api/shell/platform/invite", {
+    const created = await online("/invite", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -819,23 +819,15 @@ async function onInviteOpponent() {
           transport: { roster: { signal: true } },
         },
       }),
-    }).then(async (res) => {
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const err = new Error(data.error || data.code || res.statusText);
-        err.code = data.code;
-        throw err;
-      }
-      return data;
     });
     inviteUrlInput.value = created.short_url || created.deep_link || "";
     inviteBox.hidden = true;
     setStatus("短網址已在遊樂場彈出 — 可複製或掃 QR；保持本頁在線");
   } catch (e) {
     const msg = String(e.message || e);
-    if (/not_provisioned|通行證|登入我的遊樂場/i.test(msg)) {
+    if (/not_provisioned|通行證|登入我的遊樂場|登入遊樂場/i.test(msg)) {
       setStatus(
-        "尚未登入遊樂場通行證 — 請先到後台按「登入我的遊樂場」",
+        "尚未登入遊樂場通行證 — 請先到後台按「登入我的遊樂場」（或 go 右上角登入）",
         "danger",
       );
     } else {
@@ -898,7 +890,7 @@ async function onRematch() {
 async function onCloseSession() {
   try {
     stopSeatPoll();
-    await shell("/close", { method: "POST" });
+    await online("/close", { method: "POST" });
     if (sessionChannel) {
       try {
         sessionChannel.close();

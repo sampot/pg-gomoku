@@ -33,4 +33,18 @@ describe("browser modules", () => {
     expect(res.status).not.toBe(0);
     expect(res.stderr).toMatch(/already been declared/);
   });
+
+  it("app.js does not call transitional /api/shell/* (DEC-053)", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).not.toMatch(/\/api\/shell\/session/);
+    expect(src).not.toMatch(/\/api\/shell\/platform/);
+    expect(src).toMatch(/\/api\/online\//);
+  });
+
+  it("index.html declares session:host and platform:invite", () => {
+    const html = readFileSync(join(here, "index.html"), "utf8");
+    expect(html).toMatch(/sam:capabilities/);
+    expect(html).toMatch(/session:host/);
+    expect(html).toMatch(/platform:invite/);
+  });
 });
