@@ -37,6 +37,7 @@ let lastSeq = 0;
 /** @type {ReturnType<typeof setInterval> | null} */
 let seatPollTimer = null;
 let onlineStatus = "waiting";
+let currentPlatformInviteId = null;
 let myOnlineStone = /** @type {null | 1 | 2} */ (null);
 /** @type {"host" | "player"} */
 let onlineFirstRole = "host";
@@ -693,10 +694,12 @@ function refreshOnlineStatusText() {
 function syncOnlineControls() {
   const hosting = onlineRole === "host";
   const asPlayer = onlineRole === "player";
+  const canInvite =
+    hosting && (onlineStatus === "waiting" || onlineStatus === "ready");
   const showFirstPick =
     hosting && (onlineStatus === "ready" || onlineStatus === "ended");
   btnOpenSession.disabled = hosting;
-  btnInvite.disabled = !hosting;
+  btnInvite.disabled = !(hosting && canInvite);
   btnCloseSession.disabled = !hosting;
   btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
   btnRematch.disabled = !(hosting && onlineStatus === "ended");
@@ -717,7 +720,7 @@ function syncOnlineControls() {
   } else if (hosting) {
     onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus} · ${stoneTxt}`;
     btnOpenSession.hidden = false;
-    btnInvite.hidden = false;
+    btnInvite.hidden = !canInvite;
     btnStartMatch.hidden = onlineStatus === "ended";
     btnRematch.hidden = onlineStatus !== "ended";
     btnCloseSession.hidden = false;
@@ -797,6 +800,13 @@ async function onOpenSession() {
 }
 
 async function onInviteOpponent() {
+  if (
+    onlineRole !== "host" ||
+    (onlineStatus !== "waiting" && onlineStatus !== "ready")
+  ) {
+    setStatus("開局後不能再邀請對手", "danger");
+    return;
+  }
   setStatus("建立邀請…");
   try {
     const created = await online("/invite", {
@@ -820,6 +830,7 @@ async function onInviteOpponent() {
         },
       }),
     });
+    currentPlatformInviteId = created.invite_id || null;
     inviteUrlInput.value = created.short_url || created.deep_link || "";
     inviteBox.hidden = true;
     setStatus("短網址已在遊樂場彈出 — 可複製或掃 QR；保持本頁在線");
@@ -849,6 +860,23 @@ async function onStartMatch() {
       }),
     });
     applyOnlineState(data.state);
+    stopSeatPoll();
+    const inviteId = currentPlatformInviteId;
+    currentPlatformInviteId = null;
+    inviteBox.hidden = true;
+    inviteUrlInput.value = "";
+    if (inviteId) {
+      try {
+        await online("/invite/revoke", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ inviteId }),
+        });
+      } catch {
+        // Match is already active; shell stopped local polling before revoke.
+      }
+    }
+    syncOnlineControls();
     const mine = stoneLabel(myOnlineStone);
     setStatus(
       myOnlineStone === 1
@@ -903,6 +931,7 @@ async function onCloseSession() {
     myOnlineStone = null;
     onlineFirstRole = "host";
     onlineStatus = "waiting";
+    currentPlatformInviteId = null;
     inviteBox.hidden = true;
     inviteUrlInput.value = "";
     drawBoardFrom(game.getBoard(), null);

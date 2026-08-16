@@ -153,6 +153,20 @@ describe("functions.js Host UI routes via env.HOST", () => {
     expect(data.short_url).toContain("/i/");
   });
 
+  it("POST /api/online/invite/revoke stops the current game invite", async () => {
+    const res = await handler.fetch(
+      jsonRequest("/api/online/invite/revoke", {
+        method: "POST",
+        body: { inviteId: "inv-1" },
+      }),
+      { HOST, KV },
+    );
+    expect(res.status).toBe(200);
+    expect(HOST.revokePlatformInvite).toHaveBeenCalledWith({
+      inviteId: "inv-1",
+    });
+  });
+
   it("returns host_unavailable when env.HOST is missing on online routes", async () => {
     const res = await handler.fetch(jsonRequest("/api/online/open", { method: "POST" }), {
       KV,

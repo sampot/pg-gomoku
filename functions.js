@@ -256,6 +256,14 @@ async function handleOnlineHostApi(request, env, path, method) {
       return json(created);
     }
 
+    if (path.endsWith("/api/online/invite/revoke") && method === "POST") {
+      const body = (await request.json().catch(() => ({}))) || {};
+      const inviteId = String(body.inviteId || "").trim();
+      if (!inviteId) return err("bad_args", "缺少 inviteId", 400);
+      await HOST.revokePlatformInvite({ inviteId });
+      return json({ ok: true });
+    }
+
     return null;
   } catch (e) {
     return mapHostError(e);

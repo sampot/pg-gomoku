@@ -47,4 +47,11 @@ describe("browser modules", () => {
     expect(html).toMatch(/session:host/);
     expect(html).toMatch(/platform:invite/);
   });
+
+  it("stops inviting and hides the invite action after a match starts", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(/online\("\/invite\/revoke"/);
+    expect(src).toMatch(/btnInvite\.disabled\s*=\s*!\(hosting\s*&&\s*canInvite\)/);
+    expect(src).toMatch(/btnInvite\.hidden\s*=\s*!canInvite/);
+  });
 });
