@@ -101,12 +101,30 @@ describe("functions.js Host UI routes via env.HOST", () => {
   });
 
   it("POST /api/online/close calls HOST.closeSession", async () => {
+    await KV.put(
+      "session:gomoku:v1",
+      JSON.stringify({
+        sessionId: "sess-1",
+        channelName: "playgrounds-session:sess-1",
+        status: "active",
+        turn: "white",
+        board: [],
+        winner: null,
+        lastMove: null,
+        playerSeated: true,
+        firstRole: "host",
+        seq: 3,
+      }),
+    );
     const res = await handler.fetch(jsonRequest("/api/online/close", { method: "POST" }), {
       HOST,
       KV,
     });
     expect(res.status).toBe(200);
     expect(HOST.closeSession).toHaveBeenCalledTimes(1);
+    const cleared = JSON.parse(await KV.get("session:gomoku:v1"));
+    expect(cleared.sessionId).toBeNull();
+    expect(cleared.status).toBe("waiting");
   });
 
   it("POST /api/online/domain forwards to HOST.hostSessionFetch", async () => {

@@ -210,6 +210,9 @@ async function handleOnlineHostApi(request, env, path, method) {
 
     if (path.endsWith("/api/online/close") && method === "POST") {
       await HOST.closeSession();
+      // Drop domain authority so a late Host UI state fetch cannot revive
+      // "等待對手落子…" after the match has been closed.
+      await saveStore(env, emptyStore());
       return json({ ok: true });
     }
 

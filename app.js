@@ -612,15 +612,23 @@ function bindSessionChannel(channelName) {
     if (!msg || msg.type !== "session-event") return;
     if (typeof msg.seq === "number" && msg.seq <= lastSeq) return;
     lastSeq = msg.seq || lastSeq;
+    const event = msg.event;
+    const type =
+      event && typeof event === "object" ? String(event.type || "") : "";
+    // Host close also publishes locally; do not revive the board via state fetch.
+    if (type === "session.closed" || type === "match.closed") {
+      applyEventToOnlineBoard(event);
+      return;
+    }
     if (onlineRole === "player") {
-      applyEventToOnlineBoard(msg.event);
+      applyEventToOnlineBoard(event);
       return;
     }
     void loadOnlineState().catch(() => {});
   };
 }
 
-/** Guest／local: Host closed the multiplayer session (keep board, leave online seat). */
+/** Leave the online seat; keep the last board, clear turn／host CTAs. */
 function applyHostEndedSession(message) {
   stopSeatPoll();
   if (sessionChannel) {
@@ -636,8 +644,10 @@ function applyHostEndedSession(message) {
   myOnlineStone = null;
   onlineFirstRole = "host";
   onlineStatus = "waiting";
+  currentPlatformInviteId = null;
   inviteBox.hidden = true;
   inviteUrlInput.value = "";
+  turnDisplay.textContent = "—";
   syncOnlineControls();
   setStatus(message, wasPlayer ? "danger" : "draw");
 }
@@ -737,6 +747,7 @@ function syncOnlineControls() {
 }
 
 async function loadOnlineState() {
+  if (onlineRole === "idle") return null;
   if (onlineRole === "player") {
     const state = await domain("/api/session/state");
     if (typeof state.seq === "number") lastSeq = Math.max(lastSeq, state.seq);
@@ -920,7 +931,8 @@ async function onRematch() {
 async function onCloseSession() {
   try {
     stopSeatPoll();
-    await online("/close", { method: "POST" });
+    // Close the local channel first so HOST.closeSession's session.closed
+    // echo cannot call loadOnlineState() and restore "等待對手落子…".
     if (sessionChannel) {
       try {
         sessionChannel.close();
@@ -929,16 +941,8 @@ async function onCloseSession() {
       }
       sessionChannel = null;
     }
-    onlineRole = "idle";
-    myOnlineStone = null;
-    onlineFirstRole = "host";
-    onlineStatus = "waiting";
-    currentPlatformInviteId = null;
-    inviteBox.hidden = true;
-    inviteUrlInput.value = "";
-    drawBoardFrom(game.getBoard(), null);
-    syncOnlineControls();
-    setStatus("已結束邀請場");
+    await online("/close", { method: "POST" });
+    applyHostEndedSession("已結束邀請場");
   } catch (e) {
     setStatus(String(e.message || e), "danger");
   }

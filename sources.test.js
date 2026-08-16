@@ -62,4 +62,14 @@ describe("browser modules", () => {
     );
     expect(src).toMatch(/if \(state\.firstRole && shouldApplyFirstRole\)/);
   });
+
+  it("ends the Host UI when the session closed event arrives locally", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(
+      /if \(type === "session\.closed" \|\| type === "match\.closed"\) \{\s*applyHostEndedSession/,
+    );
+    expect(src).toMatch(
+      /async function onCloseSession\(\) \{[\s\S]*?applyHostEndedSession\("已結束邀請場"\)/,
+    );
+  });
 });
