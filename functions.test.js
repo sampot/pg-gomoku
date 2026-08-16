@@ -253,7 +253,7 @@ describe("functions.js /api/session/presence (1v1 disconnect)", () => {
     );
   }
 
-  it("ends an active match when the opponent unseats (disconnect)", async () => {
+  it("clears the session when the opponent unseats mid-game (整場結束)", async () => {
     await seedActive();
     const res = await handler.fetch(
       jsonRequest("/api/session/presence", {
@@ -264,20 +264,16 @@ describe("functions.js /api/session/presence (1v1 disconnect)", () => {
     );
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.state.status).toBe("ended");
-    expect(data.state.playerSeated).toBe(false);
     expect(data.events[0]).toMatchObject({
-      type: "match.status",
-      status: "ended",
+      type: "session.closed",
       reason: "opponent_left",
-      playerSeated: false,
     });
+    expect(data.state.sessionId).toBeFalsy();
     const stored = JSON.parse(await KV.get("session:gomoku:v1"));
-    expect(stored.status).toBe("ended");
-    expect(stored.playerSeated).toBe(false);
+    expect(stored.sessionId).toBeFalsy();
   });
 
-  it("keeps ready→waiting when opponent leaves before start", async () => {
+  it("clears the session when the opponent leaves before start (ready)", async () => {
     await KV.put(
       "session:gomoku:v1",
       JSON.stringify({
@@ -301,7 +297,10 @@ describe("functions.js /api/session/presence (1v1 disconnect)", () => {
       { KV },
     );
     const data = await res.json();
-    expect(data.state.status).toBe("waiting");
-    expect(data.events[0].reason).toBeUndefined();
+    expect(data.events[0]).toMatchObject({
+      type: "session.closed",
+      reason: "opponent_left",
+    });
+    expect(data.state.sessionId).toBeFalsy();
   });
 });

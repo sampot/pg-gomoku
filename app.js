@@ -560,17 +560,14 @@ function applyEventToOnlineBoard(event) {
     applyHostEndedSession(
       event.reason === "host_closed"
         ? "主持已結束這一場"
-        : "這一場已結束",
+        : event.reason === "opponent_left"
+          ? `${opponentLabel()}已離開，請重新開場`
+          : "這一場已結束",
     );
     return;
   }
   if (type === "match.status") {
     onlineStatus = event.status || onlineStatus;
-    if (event.reason === "opponent_left" && onlineStatus === "ended") {
-      setStatus(`${opponentLabel()}已離開，這一局結束。`, "draw");
-      syncOnlineControls();
-      return;
-    }
     refreshOnlineStatusText();
     syncOnlineControls();
     return;

@@ -375,16 +375,38 @@ export default {
       }
       const body = (await request.json().catch(() => null)) || {};
       const seated = Boolean(body.playerSeated);
+      // 1v1：對手離席／斷線 → 整場結束（須重新開場；不做同 session 重連／再來一局）。
+      if (
+        !seated &&
+        store.sessionId &&
+        (store.status === "ready" ||
+          store.status === "active" ||
+          store.status === "ended")
+      ) {
+        const seq = store.seq + 1;
+        const channelName = store.channelName;
+        const closeReason =
+          String(body.reason || "").trim() === "host_closed"
+            ? "host_closed"
+            : "opponent_left";
+        await saveStore(env, emptyStore());
+        const event = {
+          type: "session.closed",
+          reason: closeReason,
+          seq,
+        };
+        return json({
+          ok: true,
+          events: [event],
+          state: publicState(emptyStore()),
+          seq,
+          sessionId: null,
+          channelName,
+        });
+      }
       store.playerSeated = seated;
-      /** @type {string | undefined} */
-      let leaveReason;
       if (store.status === "waiting" && seated) store.status = "ready";
       if (store.status === "ready" && !seated) store.status = "waiting";
-      // 1v1：對弈中對手斷線／離席 → 這一局結束（不做重連）。
-      if (store.status === "active" && !seated) {
-        store.status = "ended";
-        leaveReason = "opponent_left";
-      }
       store.seq += 1;
       await saveStore(env, store);
       const event = {
@@ -392,7 +414,6 @@ export default {
         status: store.status,
         playerSeated: store.playerSeated,
         seq: store.seq,
-        ...(leaveReason ? { reason: leaveReason } : {}),
       };
       return json({
         ok: true,
