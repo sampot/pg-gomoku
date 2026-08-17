@@ -3,6 +3,58 @@
  * Board is row-major: board[y][x], player 1 = black, 2 = white.
  */
 
+const WIN_DIRECTIONS = [
+  [1, 0],
+  [0, 1],
+  [1, 1],
+  [1, -1],
+];
+
+/**
+ * Winning cells for the stone at `last` (if any). Usable for local + online boards.
+ * @param {(null|1|2)[][]} board
+ * @param {{ x: number, y: number, player?: number } | null | undefined} last
+ * @param {number} [size]
+ * @returns {{ x: number, y: number }[] | null}
+ */
+export function findWinningLine(board, last, size = board?.length ?? 15) {
+  if (!board || !last) return null;
+  const { x, y } = last;
+  if (
+    !Number.isInteger(x) ||
+    !Number.isInteger(y) ||
+    x < 0 ||
+    y < 0 ||
+    x >= size ||
+    y >= size
+  ) {
+    return null;
+  }
+  const player = last.player ?? board[y]?.[x];
+  if (player !== 1 && player !== 2) return null;
+  if (board[y][x] !== player) return null;
+
+  for (const [dx, dy] of WIN_DIRECTIONS) {
+    const cells = [{ x, y }];
+    for (let i = 1; ; i++) {
+      const nx = x + dx * i;
+      const ny = y + dy * i;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) break;
+      if (board[ny][nx] !== player) break;
+      cells.push({ x: nx, y: ny });
+    }
+    for (let i = 1; ; i++) {
+      const nx = x - dx * i;
+      const ny = y - dy * i;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) break;
+      if (board[ny][nx] !== player) break;
+      cells.unshift({ x: nx, y: ny });
+    }
+    if (cells.length >= 5) return cells;
+  }
+  return null;
+}
+
 export class GomokuGame {
   constructor(size = 15) {
     this.size = size;
@@ -18,6 +70,8 @@ export class GomokuGame {
     this.winner = null; // 1 | 2 | 0 (draw) | null
     this.lastMove = null;
     this.moveCount = 0;
+    /** @type {{ x: number, y: number }[] | null} */
+    this.winningLine = null;
   }
 
   getBoard() {
@@ -40,6 +94,11 @@ export class GomokuGame {
     return this.winner;
   }
 
+  /** @returns {{ x: number, y: number }[] | null} */
+  getWinningLine() {
+    return this.winningLine;
+  }
+
   inBounds(x, y) {
     return x >= 0 && x < this.size && y >= 0 && y < this.size;
   }
@@ -54,9 +113,11 @@ export class GomokuGame {
     this.lastMove = { x, y, player };
     this.moveCount += 1;
 
-    if (this.checkWin(x, y, player)) {
+    const line = findWinningLine(this.board, this.lastMove, this.size);
+    if (line) {
       this.gameOver = true;
       this.winner = player;
+      this.winningLine = line;
       return true;
     }
 
@@ -71,34 +132,9 @@ export class GomokuGame {
   }
 
   checkWin(x, y, player) {
-    const directions = [
-      [1, 0],
-      [0, 1],
-      [1, 1],
-      [1, -1],
-    ];
-
-    for (const [dx, dy] of directions) {
-      let count = 1;
-
-      for (let i = 1; ; i++) {
-        const nx = x + dx * i;
-        const ny = y + dy * i;
-        if (!this.inBounds(nx, ny) || this.board[ny][nx] !== player) break;
-        count++;
-      }
-
-      for (let i = 1; ; i++) {
-        const nx = x - dx * i;
-        const ny = y - dy * i;
-        if (!this.inBounds(nx, ny) || this.board[ny][nx] !== player) break;
-        count++;
-      }
-
-      if (count >= 5) return true;
-    }
-
-    return false;
+    return (
+      findWinningLine(this.board, { x, y, player }, this.size) != null
+    );
   }
 
   /** Score-based AI; returns { x, y } or null. */

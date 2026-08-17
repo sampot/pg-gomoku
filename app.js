@@ -1,10 +1,15 @@
-import { GomokuGame } from "./gomoku.js";
+import { findWinningLine, GomokuGame } from "./gomoku.js";
+import {
+  planLifecycleResume,
+  planLifecycleSuspend,
+} from "./lifecycle.js";
 import {
   GOMOKU_BOARD_SIZE,
   GOMOKU_PROTOCOL_ID,
   GOMOKU_SOURCE,
   gomokuProtocolSpec,
 } from "./protocol.js";
+import { deriveChromeState } from "./ui-state.js";
 
 const BOARD_SIZE = GOMOKU_BOARD_SIZE;
 const CELL_SIZE = 40;
@@ -15,6 +20,7 @@ const CANVAS_SIZE = PADDING * 2 + CELL_SIZE * (BOARD_SIZE - 1);
 let playMode = "local";
 /** @type {'pvp' | 'ai' | 'aivsai'} */
 let mode = "pvp";
+let localStarted = false;
 let game = new GomokuGame(BOARD_SIZE);
 /** @type {ReturnType<typeof setInterval> | null} */
 let aiVsAiTimer = null;
@@ -55,8 +61,12 @@ const gameStatus = document.getElementById("game-status");
 const modeLabel = document.getElementById("mode-label");
 const startAiBtn = document.getElementById("start-ai");
 const startAiVsAiBtn = document.getElementById("start-ai-vs-ai");
+const startLocalPvpBtn = document.getElementById("start-local-pvp");
 const resetBtn = document.getElementById("reset-game");
+const backToSetupBtn = document.getElementById("back-to-setup");
+const matchMenu = document.getElementById("match-menu");
 const highScoreEl = document.getElementById("high-score");
+const highScoreWrap = document.getElementById("high-score-wrap");
 const localToolbar = document.getElementById("local-toolbar");
 const localAiControls = document.getElementById("local-ai-controls");
 const playModeSection = document.getElementById("play-mode");
@@ -70,6 +80,9 @@ const btnInvite = document.getElementById("btn-invite");
 const btnStartMatch = document.getElementById("btn-start-match");
 const btnRematch = document.getElementById("btn-rematch");
 const btnCloseSession = document.getElementById("btn-close-session");
+const btnCloseSessionMatch = document.getElementById(
+  "btn-close-session-match",
+);
 const firstMoveField = document.getElementById("first-move");
 const inviteBox = document.getElementById("invite-box");
 const inviteUrlInput = document.getElementById("invite-url");
@@ -116,99 +129,403 @@ function cssVar(name) {
     .trim();
 }
 
+/** Logical board size in CSS px; backing store may be × DPR. */
+const LOGICAL_SIZE = CANVAS_SIZE;
+
+/** @type {HTMLCanvasElement | null} */
+let boardTexture = null;
+/** @type {string} */
+let boardTextureKey = "";
+/** Hover ghost for fine pointers only. */
+let hoverCell = /** @type {{ x: number, y: number } | null} */ (null);
+/** Last board snapshot used for hover redraw. */
+let lastDrawnBoard = /** @type {(null|1|2)[][] | null} */ (null);
+let lastDrawnMove = /** @type {{ x: number, y: number, player?: number } | null} */ (
+  null
+);
+
 function syncCanvasBackingStore() {
-  canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const bw = Math.round(LOGICAL_SIZE * dpr);
+  const bh = Math.round(LOGICAL_SIZE * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width = bw;
+    canvas.height = bh;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function eventToCell(e) {
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const px = (e.clientX - rect.left) * scaleX;
-  const py = (e.clientY - rect.top) * scaleY;
+  // Map into logical canvas space (independent of DPR / CSS size).
+  const px = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
+  const py = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
   const x = Math.round((px - PADDING) / CELL_SIZE);
   const y = Math.round((py - PADDING) / CELL_SIZE);
   if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return null;
   return { x, y };
 }
 
+function hash2(x, y) {
+  let n = x * 374761393 + y * 668265263;
+  n = (n ^ (n >>> 13)) * 1274126177;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Procedural wood grain (cached per theme colors).
+ * @param {string} boardDark
+ * @param {string} boardLight
+ */
+function ensureBoardTexture(boardDark, boardLight) {
+  const key = `${LOGICAL_SIZE}|${boardDark}|${boardLight}`;
+  if (boardTexture && boardTextureKey === key) return boardTexture;
+
+  const c = document.createElement("canvas");
+  c.width = LOGICAL_SIZE;
+  c.height = LOGICAL_SIZE;
+  const g = c.getContext("2d");
+  if (!g) return c;
+
+  const base = g.createLinearGradient(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
+  base.addColorStop(0, boardLight);
+  base.addColorStop(0.45, boardDark);
+  base.addColorStop(1, boardLight);
+  g.fillStyle = base;
+  g.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
+
+  // Soft radial vignette (center brighter like lit table).
+  const vig = g.createRadialGradient(
+    LOGICAL_SIZE * 0.42,
+    LOGICAL_SIZE * 0.38,
+    LOGICAL_SIZE * 0.1,
+    LOGICAL_SIZE * 0.5,
+    LOGICAL_SIZE * 0.55,
+    LOGICAL_SIZE * 0.78,
+  );
+  vig.addColorStop(0, "rgba(255,245,220,0.22)");
+  vig.addColorStop(0.55, "rgba(0,0,0,0)");
+  vig.addColorStop(1, "rgba(40,20,0,0.28)");
+  g.fillStyle = vig;
+  g.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
+
+  // Vertical-ish grain streaks.
+  for (let i = 0; i < 90; i++) {
+    const x0 = hash2(i, 1) * LOGICAL_SIZE;
+    const wobble = (hash2(i, 2) - 0.5) * 18;
+    const alpha = 0.04 + hash2(i, 3) * 0.07;
+    g.strokeStyle =
+      hash2(i, 4) > 0.5
+        ? `rgba(70,40,10,${alpha})`
+        : `rgba(255,230,180,${alpha * 0.7})`;
+    g.lineWidth = 0.6 + hash2(i, 5) * 1.8;
+    g.beginPath();
+    g.moveTo(x0, 0);
+    for (let y = 0; y <= LOGICAL_SIZE; y += 24) {
+      g.lineTo(x0 + Math.sin(y * 0.02 + i) * wobble, y);
+    }
+    g.stroke();
+  }
+
+  // Fine pores.
+  for (let i = 0; i < 400; i++) {
+    const px = hash2(i, 10) * LOGICAL_SIZE;
+    const py = hash2(i, 11) * LOGICAL_SIZE;
+    g.fillStyle = `rgba(50,28,8,${0.03 + hash2(i, 12) * 0.06})`;
+    g.fillRect(px, py, 1.2, 1.2);
+  }
+
+  boardTexture = c;
+  boardTextureKey = key;
+  return c;
+}
+
+function drawBoardBevel() {
+  const edge = 14;
+  // Top-left highlight
+  const hi = ctx.createLinearGradient(0, 0, 0, edge);
+  hi.addColorStop(0, "rgba(255,255,255,0.38)");
+  hi.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = hi;
+  ctx.fillRect(0, 0, LOGICAL_SIZE, edge);
+
+  const hiX = ctx.createLinearGradient(0, 0, edge, 0);
+  hiX.addColorStop(0, "rgba(255,255,255,0.28)");
+  hiX.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = hiX;
+  ctx.fillRect(0, 0, edge, LOGICAL_SIZE);
+
+  // Bottom-right shade (board thickness)
+  const sh = ctx.createLinearGradient(
+    0,
+    LOGICAL_SIZE - edge,
+    0,
+    LOGICAL_SIZE,
+  );
+  sh.addColorStop(0, "rgba(0,0,0,0)");
+  sh.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = sh;
+  ctx.fillRect(0, LOGICAL_SIZE - edge, LOGICAL_SIZE, edge);
+
+  const shX = ctx.createLinearGradient(
+    LOGICAL_SIZE - edge,
+    0,
+    LOGICAL_SIZE,
+    0,
+  );
+  shX.addColorStop(0, "rgba(0,0,0,0)");
+  shX.addColorStop(1, "rgba(0,0,0,0.32)");
+  ctx.fillStyle = shX;
+  ctx.fillRect(LOGICAL_SIZE - edge, 0, edge, LOGICAL_SIZE);
+
+  // Inner rim around playable grid
+  const inset = PADDING - 8;
+  ctx.strokeStyle = "rgba(60,35,12,0.45)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(
+    inset,
+    inset,
+    LOGICAL_SIZE - inset * 2,
+    LOGICAL_SIZE - inset * 2,
+  );
+  ctx.strokeStyle = "rgba(255,230,190,0.25)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(
+    inset + 2,
+    inset + 2,
+    LOGICAL_SIZE - inset * 2 - 4,
+    LOGICAL_SIZE - inset * 2 - 4,
+  );
+}
+
 function drawBoardFrom(board, last) {
+  syncCanvasBackingStore();
+  lastDrawnBoard = board;
+  lastDrawnMove = last;
+
   const boardDark = cssVar("--board-dark") || "#bcaaa4";
   const boardLight = cssVar("--board-light") || "#deb887";
   const stoneBlack = cssVar("--stone-black") || "#1a1a1a";
   const stoneWhite = cssVar("--stone-white") || "#f5f5f5";
+  const lineInk = cssVar("--board-line") || "rgba(55, 32, 12, 0.55)";
+  const starInk = cssVar("--board-star") || "rgba(45, 25, 8, 0.7)";
 
-  ctx.fillStyle = boardDark;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const tex = ensureBoardTexture(boardDark, boardLight);
+  ctx.drawImage(tex, 0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
+  drawBoardBevel();
 
-  ctx.strokeStyle = boardLight;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = lineInk;
+  ctx.lineWidth = 1.15;
+  ctx.lineCap = "round";
   for (let i = 0; i < BOARD_SIZE; i++) {
     const p = PADDING + i * CELL_SIZE;
     ctx.beginPath();
     ctx.moveTo(PADDING, p);
-    ctx.lineTo(canvas.width - PADDING, p);
+    ctx.lineTo(LOGICAL_SIZE - PADDING, p);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(p, PADDING);
-    ctx.lineTo(p, canvas.height - PADDING);
+    ctx.lineTo(p, LOGICAL_SIZE - PADDING);
     ctx.stroke();
   }
 
   const stars = [3, 7, 11];
-  ctx.fillStyle = boardLight;
   for (const sx of stars) {
     for (const sy of stars) {
+      const cx = PADDING + sx * CELL_SIZE;
+      const cy = PADDING + sy * CELL_SIZE;
       ctx.beginPath();
-      ctx.arc(
-        PADDING + sx * CELL_SIZE,
-        PADDING + sy * CELL_SIZE,
-        3.5,
-        0,
-        Math.PI * 2,
-      );
+      ctx.fillStyle = starInk;
+      ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,235,200,0.35)";
+      ctx.arc(cx - 0.8, cy - 0.8, 1.2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
+  const winLine = findWinningLine(board, last, BOARD_SIZE);
+  /** @type {Set<string> | null} */
+  const winKeys = winLine
+    ? new Set(winLine.map((c) => `${c.x},${c.y}`))
+    : null;
+
+  // Shadows first (under all stones), then bodies — reads more 3D.
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const player = board[y]?.[x];
       if (player == null) continue;
-      drawStone(x, y, player, stoneBlack, stoneWhite, last);
+      drawStoneShadow(x, y);
     }
+  }
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const player = board[y]?.[x];
+      if (player == null) continue;
+      drawStone(x, y, player, stoneBlack, stoneWhite, last, winKeys);
+    }
+  }
+
+  if (winLine) drawWinningHighlight(winLine, board);
+
+  if (
+    !winLine &&
+    hoverCell &&
+    board[hoverCell.y]?.[hoverCell.x] == null &&
+    !(last && last.x === hoverCell.x && last.y === hoverCell.y)
+  ) {
+    const ghostPlayer =
+      playMode === "online" && myOnlineStone
+        ? myOnlineStone
+        : game.getCurrentPlayer();
+    drawStoneGhost(hoverCell.x, hoverCell.y, ghostPlayer);
   }
 }
 
-function drawStone(x, y, player, stoneBlack, stoneWhite, last) {
+/**
+ * Highlight winning stones only — no connecting stroke.
+ * @param {{ x: number, y: number }[]} cells
+ * @param {(null|1|2)[][]} board
+ */
+function drawWinningHighlight(cells, board) {
+  if (!cells.length) return;
+  const first = cells[0];
+  const player = board[first.y]?.[first.x];
+
+  ctx.save();
+  for (const { x, y } of cells) {
+    const cx = PADDING + x * CELL_SIZE;
+    const cy = PADDING + y * CELL_SIZE;
+    const r = CELL_SIZE / 2 - 2;
+    ctx.beginPath();
+    ctx.strokeStyle =
+      player === 1 ? "rgba(251, 191, 36, 0.95)" : "rgba(248, 113, 113, 0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor =
+      player === 1 ? "rgba(251, 191, 36, 0.55)" : "rgba(239, 68, 68, 0.5)";
+    ctx.shadowBlur = 6;
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawStoneShadow(x, y) {
   const cx = PADDING + x * CELL_SIZE;
   const cy = PADDING + y * CELL_SIZE;
   const r = CELL_SIZE / 2 - 4;
+  ctx.save();
+  ctx.translate(cx + 2.2, cy + 3.5);
+  ctx.scale(1, 0.55);
+  const shadow = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.05);
+  shadow.addColorStop(0, "rgba(0,0,0,0.35)");
+  shadow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {1|2} player
+ * @param {string} stoneBlack
+ * @param {string} stoneWhite
+ * @param {{ x: number, y: number } | null} last
+ * @param {Set<string> | null} [winKeys]
+ */
+function drawStone(x, y, player, stoneBlack, stoneWhite, last, winKeys = null) {
+  const cx = PADDING + x * CELL_SIZE;
+  const cy = PADDING + y * CELL_SIZE;
+  const r = CELL_SIZE / 2 - 4;
+  const isBlack = player === 1;
+  const isWin = winKeys?.has(`${x},${y}`);
+
+  // Body
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  const gradient = ctx.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, r);
-  if (player === 1) {
-    gradient.addColorStop(0, "#555");
-    gradient.addColorStop(1, stoneBlack);
+  const body = ctx.createRadialGradient(
+    cx - r * 0.35,
+    cy - r * 0.4,
+    r * 0.08,
+    cx + r * 0.1,
+    cy + r * 0.15,
+    r,
+  );
+  if (isBlack) {
+    body.addColorStop(0, "#6a6a6a");
+    body.addColorStop(0.35, "#2c2c2c");
+    body.addColorStop(0.85, stoneBlack);
+    body.addColorStop(1, "#0a0a0a");
   } else {
-    gradient.addColorStop(0, "#fff");
-    gradient.addColorStop(1, stoneWhite);
+    body.addColorStop(0, "#ffffff");
+    body.addColorStop(0.4, stoneWhite);
+    body.addColorStop(0.85, "#d8d8d8");
+    body.addColorStop(1, "#b8b8b8");
   }
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = body;
   ctx.fill();
-  ctx.strokeStyle = player === 1 ? "#222" : "#bbb";
-  ctx.lineWidth = 1;
+
+  // Rim
+  ctx.strokeStyle = isBlack ? "rgba(0,0,0,0.65)" : "rgba(120,120,120,0.55)";
+  ctx.lineWidth = 1.25;
   ctx.stroke();
 
-  if (last && last.x === x && last.y === y) {
-    ctx.beginPath();
-    ctx.fillStyle = player === 1 ? "#fbbf24" : "#ef4444";
-    ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+  // Specular
+  ctx.beginPath();
+  const hx = cx - r * 0.32;
+  const hy = cy - r * 0.38;
+  const gloss = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 0.55);
+  if (isBlack) {
+    gloss.addColorStop(0, "rgba(255,255,255,0.42)");
+    gloss.addColorStop(0.35, "rgba(255,255,255,0.12)");
+    gloss.addColorStop(1, "rgba(255,255,255,0)");
+  } else {
+    gloss.addColorStop(0, "rgba(255,255,255,0.95)");
+    gloss.addColorStop(0.4, "rgba(255,255,255,0.35)");
+    gloss.addColorStop(1, "rgba(255,255,255,0)");
   }
+  ctx.fillStyle = gloss;
+  ctx.arc(cx, cy, r * 0.92, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Last-move ring; skip when win glow covers the stone
+  if (!isWin && last && last.x === x && last.y === y) {
+    ctx.beginPath();
+    ctx.strokeStyle = isBlack ? "#fbbf24" : "#ef4444";
+    ctx.lineWidth = 2.25;
+    ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawStoneGhost(x, y, player) {
+  const cx = PADDING + x * CELL_SIZE;
+  const cy = PADDING + y * CELL_SIZE;
+  const r = CELL_SIZE / 2 - 4;
+  ctx.save();
+  ctx.globalAlpha = 0.38;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = player === 1 ? "#1a1a1a" : "#f7f7f7";
+  ctx.fill();
+  ctx.strokeStyle = player === 1 ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function finePointerHover() {
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
+
+function redrawLastBoard() {
+  if (!lastDrawnBoard) return;
+  drawBoardFrom(lastDrawnBoard, lastDrawnMove);
 }
 
 function playerName(p) {
@@ -218,6 +535,46 @@ function playerName(p) {
 function setStatus(message, tone = "") {
   gameStatus.textContent = message;
   gameStatus.dataset.tone = tone;
+  gameStatus.classList.remove("status-flash");
+  // Retrigger CSS animation when status text／tone changes.
+  void gameStatus.offsetWidth;
+  gameStatus.classList.add("status-flash");
+}
+
+function syncLayoutChrome() {
+  const chrome = deriveChromeState({
+    playMode,
+    localMode: mode,
+    localStarted,
+    hasMove: game.getLastMove() != null,
+    onlineRole,
+    onlineStatus,
+  });
+  const prev = document.body.dataset.layout;
+  document.body.dataset.layout = chrome.layout;
+  document.body.dataset.phase = chrome.phase;
+
+  playModeSection.hidden = !chrome.showSetup;
+  localToolbar.hidden = !(chrome.showSetup && playMode === "local");
+  onlinePanel.hidden = !(chrome.showSetup && playMode === "online");
+  document.getElementById("match-hud").hidden = !chrome.showHud;
+  matchMenu.hidden = !chrome.showMatchMenu;
+
+  resetBtn.hidden = playMode !== "local";
+  backToSetupBtn.hidden = playMode !== "local";
+  btnCloseSessionMatch.hidden = !(
+    playMode === "online" &&
+    onlineRole === "host" &&
+    onlineStatus === "active"
+  );
+
+  if (prev !== chrome.layout) {
+    // Layout swap changes board CSS size — refresh backing store／hit map.
+    requestAnimationFrame(() => {
+      fitBoardSquare();
+      redrawLastBoard();
+    });
+  }
 }
 
 function drawBoard() {
@@ -231,35 +588,45 @@ function drawBoard() {
 function updateChrome() {
   if (playMode === "online") {
     // Keep turn meta; hide local AI／重新開始 (邀請對弈 unrelated).
-    localToolbar.hidden = false;
+    localToolbar.hidden = true;
     localAiControls.hidden = true;
-    modeLabel.textContent = "邀請對弈";
+    modeLabel.textContent = "邀請";
+    if (highScoreWrap) highScoreWrap.hidden = true;
+    if (onlineStatus !== "active") {
+      // applyOnlineState owns the label while a match is live.
+      if (onlineRole === "idle" || onlineStatus === "waiting") {
+        turnDisplay.textContent = "—";
+      }
+    }
+    syncLayoutChrome();
     return;
   }
   localToolbar.hidden = false;
   localAiControls.hidden = false;
   const labels = {
-    pvp: "雙人輪流",
-    ai: "人機對弈（您執黑）",
-    aivsai: "AI 對 AI",
+    pvp: "雙人",
+    ai: "人機",
+    aivsai: "AI對AI",
   };
   modeLabel.textContent = labels[mode];
 
   if (mode === "aivsai" && aiVsAiTimer) {
-    turnDisplay.textContent = "AI 對弈中";
+    turnDisplay.textContent = "進行中";
   } else if (game.isGameOver()) {
     turnDisplay.textContent = "—";
   } else {
     turnDisplay.textContent = playerName(game.getCurrentPlayer());
   }
 
-  startAiBtn.textContent =
-    mode === "ai" ? "改為雙人對弈" : "開始 AI 對弈";
+  if (highScoreWrap) highScoreWrap.hidden = mode !== "ai";
+
+  startAiBtn.textContent = "挑戰 AI";
   startAiVsAiBtn.textContent = aiVsAiTimer
     ? "停止 AI 對 AI"
-    : "AI 對 AI 自動對弈";
+    : "AI 對 AI";
   startAiBtn.disabled = Boolean(aiVsAiTimer);
   startAiVsAiBtn.disabled = thinking && mode !== "aivsai";
+  syncLayoutChrome();
 }
 
 function refreshStatus() {
@@ -267,14 +634,24 @@ function refreshStatus() {
     refreshOnlineStatusText();
     return;
   }
+  if (!localStarted && mode === "pvp" && game.getLastMove() == null) {
+    setStatus("選擇對弈方式，或直接落子開始雙人對弈。");
+    return;
+  }
   if (game.isGameOver()) {
     const w = game.getWinner();
-    if (w === 0) setStatus("平局！棋盤已滿。", "draw");
-    else if (mode === "ai" && w === 2) setStatus("白棋（AI）獲勝！", "white");
-    else if (mode === "ai" && w === 1) setStatus("黑棋（您）獲勝！", "black");
+    if (w === 0) setStatus("平局 — 棋盤已滿，無人連五。", "draw");
+    else if (mode === "ai" && w === 2)
+      setStatus("白棋（AI）連五獲勝！", "white");
+    else if (mode === "ai" && w === 1)
+      setStatus("黑棋（您）連五獲勝！", "black");
     else if (mode === "aivsai")
-      setStatus(`${playerName(w)}（AI）獲勝！`, w === 1 ? "black" : "white");
-    else setStatus(`${playerName(w)}獲勝！`, w === 1 ? "black" : "white");
+      setStatus(
+        `${playerName(w)}（AI）連五獲勝！`,
+        w === 1 ? "black" : "white",
+      );
+    else
+      setStatus(`${playerName(w)}連五獲勝！`, w === 1 ? "black" : "white");
     onGameOver();
     return;
   }
@@ -306,6 +683,50 @@ function stopAiVsAi() {
     aiVsAiTimer = null;
   }
 }
+
+/** @type {{ resumeAi: boolean, resumeSeatPoll: boolean } | null} */
+let lifecycleSnap = null;
+
+function suspendGame() {
+  const plan = planLifecycleSuspend({
+    aiRunning: Boolean(aiVsAiTimer),
+    seatPollRunning: Boolean(seatPollTimer),
+  });
+  // Merge: visibilitychange + pagehide may both fire; keep prior resume flags.
+  lifecycleSnap = {
+    resumeAi: Boolean(lifecycleSnap?.resumeAi) || plan.resumeAi,
+    resumeSeatPoll:
+      Boolean(lifecycleSnap?.resumeSeatPoll) || plan.resumeSeatPoll,
+  };
+  if (plan.stopAi) stopAiVsAi();
+  if (plan.stopSeatPoll) stopSeatPoll();
+  if (plan.clearThinking) thinking = false;
+  if (plan.clearHover && hoverCell) {
+    hoverCell = null;
+    redrawLastBoard();
+  }
+}
+
+function resumeGame() {
+  if (!lifecycleSnap) return;
+  const plan = planLifecycleResume(lifecycleSnap, {
+    mode,
+    gameOver: game.isGameOver(),
+    hosting: onlineRole === "host",
+  });
+  lifecycleSnap = null;
+  if (plan.resumeAi) {
+    scheduleAiMove();
+    runAiVsAiLoop();
+  }
+  if (plan.resumeSeatPoll) startSeatPoll();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") suspendGame();
+  else resumeGame();
+});
+window.addEventListener("pagehide", suspendGame);
 
 // ─── 最高分（人機連勝），經 SDK `window.PG.kv` 寫入宿主 /api/kv ───
 
@@ -342,7 +763,7 @@ async function saveHighScore() {
     }
     await pg.kv.put(HIGHSCORE_KEY, String(highScore));
   } catch {
-    /* 寫入失敗靜默降級 */
+    setStatus("連勝已更新（本機），但未能同步到遊樂場存檔。", "danger");
   }
 }
 
@@ -369,6 +790,8 @@ function placeStone(x, y) {
   if (game.isGameOver() || thinking) return false;
   if (!game.makeMove(x, y)) return false;
 
+  localStarted = true;
+  hoverCell = null;
   drawBoardFrom(game.getBoard(), game.getLastMove());
   updateChrome();
   refreshStatus();
@@ -410,6 +833,7 @@ function scheduleAiMove() {
 function startHumanAi() {
   stopAiVsAi();
   mode = "ai";
+  localStarted = true;
   game.reset();
   thinking = false;
   currentStreak = 0;
@@ -422,6 +846,7 @@ function startHumanAi() {
 function startPvp() {
   stopAiVsAi();
   mode = "pvp";
+  localStarted = true;
   game.reset();
   thinking = false;
   currentStreak = 0;
@@ -464,6 +889,7 @@ function toggleAiVsAi() {
     mode === "aivsai" && !game.isGameOver() && game.getLastMove() != null;
 
   mode = "aivsai";
+  localStarted = true;
   thinking = false;
   if (!resume) {
     game.reset();
@@ -481,6 +907,19 @@ function restartGame() {
   thinking = false;
   game.reset();
   if (mode === "aivsai") mode = "pvp";
+  currentStreak = 0;
+  gameOverHandled = false;
+  drawBoardFrom(game.getBoard(), game.getLastMove());
+  updateChrome();
+  refreshStatus();
+}
+
+function returnToLocalSetup() {
+  stopAiVsAi();
+  mode = "pvp";
+  localStarted = false;
+  thinking = false;
+  game.reset();
   currentStreak = 0;
   gameOverHandled = false;
   drawBoardFrom(game.getBoard(), game.getLastMove());
@@ -704,10 +1143,20 @@ function refreshOnlineStatusText() {
     if (mine && turn === mine) setStatus(`輪到你（${stoneLabel(myOnlineStone)}），請落子。`);
     else setStatus(`等待${opponentLabel()}落子…`);
   } else if (onlineStatus === "ended") {
+    const line = findWinningLine(lastDrawnBoard, lastDrawnMove, BOARD_SIZE);
+    const winPlayer = line
+      ? lastDrawnBoard?.[line[0].y]?.[line[0].x]
+      : null;
+    const outcome =
+      winPlayer === 1 || winPlayer === 2
+        ? `${playerName(winPlayer)}連五獲勝！`
+        : "平局 — 棋盤已滿。";
+    const tone =
+      winPlayer === 1 ? "black" : winPlayer === 2 ? "white" : "draw";
     if (onlineRole === "host") {
-      setStatus("這一局已結束。可改先手後按「再來一局」。", "draw");
+      setStatus(`${outcome}可改先手後按「再來一局」。`, tone);
     } else {
-      setStatus("這一局已結束。等待主持再來一局…", "draw");
+      setStatus(`${outcome}等待主持再來一局…`, tone);
     }
   }
 }
@@ -715,23 +1164,29 @@ function refreshOnlineStatusText() {
 function syncOnlineControls() {
   const hosting = onlineRole === "host";
   const asPlayer = onlineRole === "player";
-  const canInvite =
-    hosting && (onlineStatus === "waiting" || onlineStatus === "ready");
-  const showFirstPick =
-    hosting && (onlineStatus === "ready" || onlineStatus === "ended");
+  const isWaiting = onlineStatus === "waiting";
+  const isReady = onlineStatus === "ready";
+  const isActive = onlineStatus === "active";
+  const isEnded = onlineStatus === "ended";
+  const canInvite = hosting && (isWaiting || isReady);
+  const showFirstPick = hosting && (isReady || isEnded);
+
   btnOpenSession.disabled = hosting;
   btnInvite.disabled = !(hosting && canInvite);
   btnCloseSession.disabled = !hosting;
-  btnStartMatch.disabled = !(hosting && onlineStatus === "ready");
-  btnRematch.disabled = !(hosting && onlineStatus === "ended");
+  btnStartMatch.disabled = !(hosting && isReady);
+  btnRematch.disabled = !(hosting && isEnded);
   firstMoveField.hidden = !showFirstPick;
-  // Invitee: play-first — hide mode switch + host CTAs (開場／邀請／開始…).
+
+  // Invitee: play-first — hide mode switch + host CTAs.
   playModeSection.hidden = asPlayer;
   onlineControls.hidden = asPlayer;
+
   const stoneTxt =
     myOnlineStone != null ? `你執${stoneLabel(myOnlineStone)}` : "先手待定";
+
   if (asPlayer) {
-    onlineMeta.textContent = `參與中 · ${GOMOKU_PROTOCOL_ID} · ${stoneTxt}`;
+    onlineMeta.textContent = `參與中 · ${stoneTxt}`;
     inviteBox.hidden = true;
     btnOpenSession.hidden = true;
     btnInvite.hidden = true;
@@ -739,20 +1194,33 @@ function syncOnlineControls() {
     btnRematch.hidden = true;
     btnCloseSession.hidden = true;
   } else if (hosting) {
-    onlineMeta.textContent = `主持中 · ${GOMOKU_PROTOCOL_ID} · ${onlineStatus} · ${stoneTxt}`;
-    btnOpenSession.hidden = false;
+    const statusLabel = isWaiting
+      ? "等候對手"
+      : isReady
+        ? "可開始"
+        : isActive
+          ? "對弈中"
+          : isEnded
+            ? "終局"
+            : onlineStatus;
+    onlineMeta.textContent = `主持 · ${statusLabel} · ${stoneTxt}`;
+    btnOpenSession.hidden = true;
     btnInvite.hidden = !canInvite;
-    btnStartMatch.hidden = onlineStatus === "ended";
-    btnRematch.hidden = onlineStatus !== "ended";
+    btnStartMatch.hidden = !isReady;
+    btnRematch.hidden = !isEnded;
     btnCloseSession.hidden = false;
+    // Keep invite URL while waiting／ready; tuck away once the match starts.
+    if (isActive || isEnded) inviteBox.hidden = true;
   } else {
     onlineMeta.textContent = "尚未開啟邀請場";
     btnOpenSession.hidden = false;
-    btnInvite.hidden = false;
-    btnStartMatch.hidden = false;
+    btnInvite.hidden = true;
+    btnStartMatch.hidden = true;
     btnRematch.hidden = true;
-    btnCloseSession.hidden = false;
+    btnCloseSession.hidden = true;
   }
+
+  syncLayoutChrome();
 }
 
 async function loadOnlineState() {
@@ -1022,6 +1490,7 @@ function setPlayMode(next) {
   if (next === "local") {
     stopSeatPoll();
     playMode = "local";
+    localStarted = game.getLastMove() != null;
     onlinePanel.hidden = true;
     modeLocalBtn.classList.add("is-active");
     modeOnlineBtn.classList.remove("is-active");
@@ -1049,9 +1518,11 @@ function setPlayMode(next) {
   setStatus("按「開場」後再邀請對手");
 }
 
+startLocalPvpBtn.addEventListener("click", startPvp);
 startAiBtn.addEventListener("click", toggleAiMode);
 startAiVsAiBtn.addEventListener("click", toggleAiVsAi);
 resetBtn.addEventListener("click", restartGame);
+backToSetupBtn.addEventListener("click", returnToLocalSetup);
 modeLocalBtn.addEventListener("click", () => setPlayMode("local"));
 modeOnlineBtn.addEventListener("click", () => setPlayMode("online"));
 btnOpenSession.addEventListener("click", () => void onOpenSession());
@@ -1059,6 +1530,7 @@ btnInvite.addEventListener("click", () => void onInviteOpponent());
 btnStartMatch.addEventListener("click", () => void onStartMatch());
 btnRematch.addEventListener("click", () => void onRematch());
 btnCloseSession.addEventListener("click", () => void onCloseSession());
+btnCloseSessionMatch.addEventListener("click", () => void onCloseSession());
 btnCopyInvite.addEventListener("click", async () => {
   const v = inviteUrlInput.value.trim();
   if (!v) return;
@@ -1071,7 +1543,51 @@ btnCopyInvite.addEventListener("click", async () => {
   }
 });
 
-canvas.addEventListener("click", (e) => {
+function canShowHoverGhost() {
+  if (!finePointerHover()) return false;
+  if (playMode === "online") {
+    if (onlineRole === "idle" || onlineStatus !== "active") return false;
+    if (!myOnlineStone) return false;
+    const turnIsBlack = turnDisplay.textContent.includes("黑");
+    if (myOnlineStone === 1 && !turnIsBlack) return false;
+    if (myOnlineStone === 2 && turnIsBlack) return false;
+    return true;
+  }
+  if (mode === "aivsai") return false;
+  if (mode === "ai" && game.getCurrentPlayer() === 2) return false;
+  if (game.isGameOver() || thinking) return false;
+  return true;
+}
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!canShowHoverGhost()) {
+    if (hoverCell) {
+      hoverCell = null;
+      redrawLastBoard();
+    }
+    return;
+  }
+  const cell = eventToCell(e);
+  const next =
+    cell && lastDrawnBoard?.[cell.y]?.[cell.x] == null ? cell : null;
+  if (
+    (hoverCell?.x ?? null) === (next?.x ?? null) &&
+    (hoverCell?.y ?? null) === (next?.y ?? null)
+  ) {
+    return;
+  }
+  hoverCell = next;
+  redrawLastBoard();
+});
+
+canvas.addEventListener("pointerleave", () => {
+  if (!hoverCell) return;
+  hoverCell = null;
+  redrawLastBoard();
+});
+
+canvas.addEventListener("pointerup", (e) => {
+  if (e.button != null && e.button !== 0) return;
   const cell = eventToCell(e);
   if (!cell) return;
 
@@ -1097,6 +1613,8 @@ canvas.addEventListener("click", (e) => {
 window
   .matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", () => {
+    boardTexture = null;
+    boardTextureKey = "";
     if (playMode === "local") {
       drawBoardFrom(game.getBoard(), game.getLastMove());
     } else {
@@ -1104,9 +1622,59 @@ window
     }
   });
 
+function fitBoardSquare() {
+  const layout = document.body.dataset.layout;
+  const box = document.querySelector(".board-container");
+  if (!box) return;
+  if (layout !== "match" && layout !== "guest") {
+    canvas.style.width = "";
+    canvas.style.height = "";
+    return;
+  }
+  // Prefer CSS container units; fall back when CQ size is unavailable.
+  const supportsCq =
+    typeof CSS !== "undefined" &&
+    CSS.supports &&
+    CSS.supports("container-type: size");
+  if (supportsCq) {
+    canvas.style.width = "";
+    canvas.style.height = "";
+    return;
+  }
+  const side = Math.max(160, Math.floor(Math.min(box.clientWidth, box.clientHeight)));
+  canvas.style.width = `${side}px`;
+  canvas.style.height = `${side}px`;
+}
+
+let viewportFitRaf = 0;
+function onViewportChromeChange() {
+  if (viewportFitRaf) cancelAnimationFrame(viewportFitRaf);
+  viewportFitRaf = requestAnimationFrame(() => {
+    viewportFitRaf = 0;
+    fitBoardSquare();
+    syncCanvasBackingStore();
+    redrawLastBoard();
+  });
+}
+
+window.addEventListener("resize", onViewportChromeChange);
+window.addEventListener("orientationchange", () => {
+  // Wait a frame for visual viewport to settle after rotate.
+  setTimeout(onViewportChromeChange, 60);
+});
+
+const boardContainerEl = document.querySelector(".board-container");
+if (boardContainerEl && typeof ResizeObserver === "function") {
+  const ro = new ResizeObserver(() => {
+    onViewportChromeChange();
+  });
+  ro.observe(boardContainerEl);
+}
+
 syncCanvasBackingStore();
 drawBoardFrom(game.getBoard(), game.getLastMove());
 updateChrome();
+fitBoardSquare();
 refreshStatus();
 void loadHighScore();
 void tryBootAsPlayer();

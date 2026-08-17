@@ -1,37 +1,50 @@
 :root {
   color-scheme: light dark;
-  --bg: #f4f5f7;
-  --panel: #ffffff;
-  --text: #14161a;
-  --muted: #5c6570;
-  --line: #d8dde3;
+  --bg: #ebe4d8;
+  --panel: #fffaf3;
+  --text: #1c1610;
+  --muted: #6a5e52;
+  --line: #d4c4b0;
   --accent: #0f766e;
-  /* Light text on dark teal — must stay high-contrast in light theme */
   --on-accent: #ffffff;
   --accent-soft: color-mix(in oklab, var(--accent) 14%, var(--panel));
-  --board-light: #e0c49a;
-  --board-dark: #c9a06a;
-  --stone-black: #1a1a1a;
-  --stone-white: #f7f7f7;
+  --board-light: #e8c993;
+  --board-dark: #c4924e;
+  --board-line: rgba(55, 32, 12, 0.55);
+  --board-star: rgba(45, 25, 8, 0.72);
+  --stone-black: #141414;
+  --stone-white: #f6f4f0;
   --danger: #b91c1c;
+  --table-glow: color-mix(in oklab, var(--board-dark) 28%, transparent);
+  --shell-pad-x: max(0.55rem, env(safe-area-inset-left), env(safe-area-inset-right));
+  --shell-pad-top: max(0.45rem, env(safe-area-inset-top));
+  --shell-pad-bottom: max(0.55rem, env(safe-area-inset-bottom));
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1216;
-    --panel: #171b21;
-    --text: #e8ecf1;
-    --muted: #9aa3ad;
-    --line: #2a313a;
+    --bg: #12100e;
+    --panel: #1c1814;
+    --text: #f0e8dc;
+    --muted: #a89888;
+    --line: #3a322a;
     --accent: #2dd4bf;
     --on-accent: #042f2e;
-    --board-light: #a08566;
-    --board-dark: #7a6b5e;
+    --board-light: #b89568;
+    --board-dark: #8a6a48;
+    --board-line: rgba(30, 18, 8, 0.65);
+    --board-star: rgba(20, 12, 4, 0.75);
+    --table-glow: color-mix(in oklab, var(--board-dark) 35%, transparent);
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
@@ -46,65 +59,221 @@ body {
     serif;
   background:
     radial-gradient(
-      1200px 600px at 10% -10%,
-      color-mix(in oklab, var(--accent) 18%, transparent),
+      900px 520px at 50% 18%,
+      var(--table-glow),
+      transparent 58%
+    ),
+    radial-gradient(
+      1100px 600px at 8% -8%,
+      color-mix(in oklab, var(--accent) 14%, transparent),
       transparent 55%
     ),
     radial-gradient(
-      900px 500px at 100% 0%,
-      color-mix(in oklab, var(--board-dark) 22%, transparent),
+      800px 480px at 100% 100%,
+      color-mix(in oklab, var(--board-dark) 18%, transparent),
       transparent 50%
     ),
     var(--bg);
   color: var(--text);
 }
 
-main {
+.shell {
   width: min(100%, 40rem);
   margin: 0 auto;
-  padding: 1.25rem 1rem 2rem;
+  padding: var(--shell-pad-top) var(--shell-pad-x) var(--shell-pad-bottom);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.55rem;
+  min-height: 100dvh;
+}
+
+.chrome-top,
+.chrome-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Setup controls are visually and semantically before the board. */
+body[data-layout="setup"] .chrome-bottom {
+  display: contents;
+}
+
+body[data-layout="setup"] .chrome-top {
+  order: 1;
+}
+
+body[data-layout="setup"] .setup-panel {
+  order: 2;
+}
+
+body[data-layout="setup"] .board-container {
+  order: 3;
+}
+
+body[data-layout="setup"] .status {
+  order: 4;
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-size: clamp(1.35rem, 4vw, 2.1rem);
   letter-spacing: 0.04em;
   text-align: center;
 }
 
 .tagline {
-  margin: 0.35rem 0 0;
+  margin: 0.25rem 0 0;
   text-align: center;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
+}
+
+/* —— Play layouts: board-first —— */
+body[data-layout="match"] .hero,
+body[data-layout="guest"] .hero {
+  display: none;
+}
+
+body[data-layout="guest"] #play-mode {
+  display: none;
+}
+
+body[data-layout="match"] .shell,
+body[data-layout="guest"] .shell {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  gap: 0.4rem;
+}
+
+body[data-layout="match"] .board-container,
+body[data-layout="guest"] .board-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  /* Size the square board to the leftover viewport. */
+  container-type: size;
+}
+
+body[data-layout="match"] #game-board,
+body[data-layout="guest"] #game-board {
+  /* Prefer the largest square that fits the flex leftover. */
+  width: min(100cqw, 100cqh);
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
+
+body[data-layout="match"] .match-hud,
+body[data-layout="guest"] .match-hud {
+  padding: 0.35rem 0.65rem;
+}
+
+body[data-layout="match"] .status,
+body[data-layout="guest"] .status {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.92rem;
+}
+
+body[data-layout="match"] .play-mode {
+  gap: 0.3rem;
+}
+
+body[data-layout="match"] .mode-btn {
+  min-height: 2.5rem;
+  max-width: none;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.9rem;
+}
+
+.match-hud {
+  padding: 0.55rem 0.75rem;
+  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+.hud-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.85rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hud-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+}
+
+.hud-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hud-item strong {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+#high-score-wrap[hidden] {
+  display: none;
 }
 
 .toolbar {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
   border: 1px solid var(--line);
-  border-radius: 0.85rem;
+  border-radius: 0.75rem;
 }
 
-/* Author `display:flex` would otherwise override the hidden attribute. */
 .toolbar[hidden],
 #local-ai-controls[hidden],
 .play-mode[hidden],
 .online-controls[hidden],
-.online-controls button[hidden] {
+.online-controls button[hidden],
+.online-panel[hidden],
+.match-hud[hidden] {
   display: none;
+}
+
+.panel-title {
+  margin: 0;
+  color: var(--muted);
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+  font-size: 0.82rem;
+  font-weight: 650;
 }
 
 .first-move {
   flex: 1 1 100%;
   margin: 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 0.55rem;
   background: var(--accent-soft);
@@ -131,7 +300,7 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 0.35rem 0.85rem 0.1rem 0;
+  margin: 0.25rem 0.85rem 0.05rem 0;
   min-height: 2.75rem;
   font-family:
     "Avenir Next",
@@ -149,27 +318,126 @@ main {
   accent-color: var(--accent);
 }
 
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-}
-
-.meta p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
-.meta strong {
-  color: var(--text);
-  font-weight: 700;
-}
-
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
+}
+
+.controls-secondary {
+  width: 100%;
+}
+
+.controls-secondary button {
+  flex: 1 1 auto;
+  min-width: calc(50% - 0.3rem);
+}
+
+.match-menu {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.match-menu[hidden] {
+  display: none;
+}
+
+.match-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--accent-soft);
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.match-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.match-menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: color-mix(in oklab, var(--panel) 92%, transparent);
+}
+
+.match-menu-actions button {
+  flex: 1 1 auto;
+}
+
+.ai-more {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.ai-more > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+
+.ai-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-more-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.ai-more-actions button {
+  flex: 1 1 auto;
+  min-width: calc(50% - 0.3rem);
+}
+
+/* Tall enough: flatten the disclosure so all actions stay one tap away. */
+@media (min-height: 760px) {
+  .ai-more > summary {
+    display: none;
+  }
+
+  .ai-more {
+    display: contents;
+  }
+
+  .ai-more-actions {
+    display: contents;
+    margin: 0;
+  }
 }
 
 button {
@@ -185,8 +453,13 @@ button {
   color: var(--on-accent);
   border-radius: 0.55rem;
   padding: 0.55rem 0.85rem;
+  min-height: 2.75rem;
   font-weight: 650;
   cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease,
+    background-color 0.15s ease;
 }
 
 button.secondary {
@@ -213,6 +486,12 @@ button:disabled {
   justify-content: center;
   align-items: center;
   width: 100%;
+  padding: 0.15rem 0 0.35rem;
+  background: radial-gradient(
+    70% 40% at 50% 78%,
+    rgba(0, 0, 0, 0.22),
+    transparent 70%
+  );
 }
 
 #game-board {
@@ -220,12 +499,17 @@ button:disabled {
   width: min(100%, 600px);
   height: auto;
   aspect-ratio: 1 / 1;
-  border-radius: 0.75rem;
+  border-radius: 0.85rem;
   box-shadow:
-    0 1px 0 color-mix(in oklab, #fff 25%, transparent) inset,
-    0 10px 28px rgba(0, 0, 0, 0.18);
+    0 1px 0 color-mix(in oklab, #fff 40%, transparent) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12),
+    0 14px 32px rgba(0, 0, 0, 0.28),
+    0 28px 48px rgba(40, 20, 0, 0.18);
   touch-action: manipulation;
   cursor: crosshair;
+  /* Prefer finger-friendly cell size on narrow phones. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 .status {
@@ -238,10 +522,29 @@ button:disabled {
     "Noto Sans TC",
     sans-serif;
   font-weight: 650;
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 0.85rem;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0.75rem;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.status.status-flash {
+  animation: status-pulse 0.45s ease;
+}
+
+@keyframes status-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.015);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .status[data-tone="black"] {
@@ -268,12 +571,17 @@ button:disabled {
 }
 
 .mode-btn {
+  flex: 1 1 0;
+  max-width: 11rem;
   min-height: 2.75rem;
-  min-width: 6.5rem;
   background: var(--accent-soft);
   color: var(--text);
   border-color: var(--line);
   font-weight: 650;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    filter 0.15s ease;
 }
 
 .mode-btn.is-active {
@@ -285,21 +593,17 @@ button:disabled {
 .online-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
-  padding: 0.9rem 1rem;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
   background: color-mix(in oklab, var(--panel) 92%, transparent);
   border: 1px solid var(--line);
-  border-radius: 0.85rem;
-}
-
-.online-panel[hidden] {
-  display: none;
+  border-radius: 0.75rem;
 }
 
 .online-panel .muted {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-family:
     "Avenir Next",
     "Segoe UI",
@@ -310,6 +614,7 @@ button:disabled {
 
 .online-controls .primary {
   min-height: 2.75rem;
+  flex: 1 1 auto;
 }
 
 .invite-box {
@@ -353,14 +658,211 @@ button:disabled {
 
 .hint {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.4;
 }
 
+/* —— Landscape phone / short height: board on the right, chrome left —— */
+@media (orientation: landscape) and (max-height: 560px) {
+  body[data-layout="match"] .shell,
+  body[data-layout="guest"] .shell {
+    display: grid;
+    grid-template-columns:
+      minmax(11rem, 32vw)
+      minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 0.4rem 0.55rem;
+    /* Leave mid-edge room for go shell drawer handles. */
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  body[data-layout="match"] .chrome-top,
+  body[data-layout="guest"] .chrome-top {
+    display: none;
+  }
+
+  body[data-layout="match"] .board-container,
+  body[data-layout="guest"] .board-container {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    justify-self: stretch;
+  }
+
+  body[data-layout="match"] .chrome-bottom,
+  body[data-layout="guest"] .chrome-bottom {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: start;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  body[data-layout="match"] #game-board,
+  body[data-layout="guest"] #game-board {
+    width: min(100cqw, 100cqh);
+  }
+
+  body[data-layout="match"] .mode-btn,
+  body[data-layout="guest"] .mode-btn {
+    min-height: 2.5rem;
+    font-size: 0.85rem;
+  }
+
+  body[data-layout="match"] .toolbar,
+  body[data-layout="match"] .online-panel {
+    padding: 0.4rem 0.5rem;
+  }
+
+  body[data-layout="match"] .status,
+  body[data-layout="guest"] .status {
+    font-size: 0.82rem;
+    padding: 0.4rem 0.5rem;
+  }
+}
+
+/* Portrait play: tuck secondary AI modes; keep reset one-tap. */
+@media (orientation: portrait) and (max-height: 760px) {
+  body[data-layout="match"] #local-toolbar {
+    padding: 0.4rem 0.5rem;
+  }
+}
+
+/* Normal portrait phones: use full width, then keep status directly below. */
+@media (orientation: portrait) and (min-height: 640px) {
+  body[data-layout="match"] .board-container,
+  body[data-layout="guest"] .board-container {
+    flex: 0 0 auto;
+    width: 100%;
+    aspect-ratio: 1;
+    container-type: inline-size;
+  }
+
+  body[data-layout="match"] #game-board,
+  body[data-layout="guest"] #game-board {
+    width: 100cqw;
+    height: 100cqw;
+  }
+
+  body[data-layout="match"] .chrome-bottom,
+  body[data-layout="guest"] .chrome-bottom {
+    margin-top: 0.1rem;
+  }
+}
+
 @media (min-width: 40rem) {
-  .toolbar {
-    flex-direction: row;
-    align-items: center;
+  body[data-layout="setup"] .shell {
+    padding-top: 1.1rem;
+    gap: 0.85rem;
+  }
+
+  .controls-secondary button {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .hud-row {
+    justify-content: flex-start;
+    gap: 1.25rem;
+  }
+}
+
+/* Desktop enhancement: large board with a stable control sidebar. */
+@media (min-width: 64rem) and (min-height: 38rem) {
+  body[data-layout="match"] .shell,
+  body[data-layout="guest"] .shell {
+    width: min(100%, 74rem);
+    margin-inline: auto;
+    padding: max(1rem, env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(19rem, 25vw, 23rem);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.85rem 1.25rem;
+  }
+
+  body[data-layout="match"] .board-container,
+  body[data-layout="guest"] .board-container {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    justify-self: stretch;
+  }
+
+  body[data-layout="match"] #game-board,
+  body[data-layout="guest"] #game-board {
+    width: min(100cqw, 100cqh, 48rem);
+    max-width: 48rem;
+    max-height: 48rem;
+  }
+
+  body[data-layout="match"] .chrome-top,
+  body[data-layout="guest"] .chrome-top {
+    display: none;
+  }
+
+  body[data-layout="match"] .chrome-bottom,
+  body[data-layout="guest"] .chrome-bottom {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: start;
+    gap: 0.65rem;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body[data-layout="match"] .match-hud,
+  body[data-layout="guest"] .match-hud,
+  body[data-layout="match"] .status,
+  body[data-layout="guest"] .status {
+    padding: 0.8rem 0.9rem;
+  }
+
+  body[data-layout="match"] .hud-row,
+  body[data-layout="guest"] .hud-row {
     justify-content: space-between;
+  }
+
+  body[data-layout="match"] .controls-secondary,
+  body[data-layout="match"] .ai-more-actions,
+  body[data-layout="match"] .online-controls {
+    flex-direction: column;
+  }
+
+  body[data-layout="match"] .controls-secondary button,
+  body[data-layout="match"] .ai-more-actions button,
+  body[data-layout="match"] .online-controls button {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  body[data-layout="match"] .toolbar,
+  body[data-layout="match"] .online-panel {
+    padding: 0.8rem 0.9rem;
+  }
+
+  body[data-layout="match"] .play-mode .mode-btn {
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .mode-btn,
+  .status {
+    transition: none;
+  }
+
+  .status.status-flash {
+    animation: none;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
   }
 }

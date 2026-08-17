@@ -10,7 +10,14 @@ const here = dirname(fileURLToPath(import.meta.url));
  * `app.js` runs in the canvas, so a parse error is invisible to unit tests that
  * only import `gomoku.js` — the board silently never renders.
  */
-const MODULES = ["app.js", "functions.js", "gomoku.js", "protocol.js"];
+const MODULES = [
+  "app.js",
+  "functions.js",
+  "gomoku.js",
+  "lifecycle.js",
+  "protocol.js",
+  "ui-state.js",
+];
 
 function syntaxCheck(source) {
   return spawnSync(process.execPath, ["--input-type=module", "--check"], {
@@ -71,6 +78,14 @@ describe("browser modules", () => {
     expect(src).toMatch(
       /async function onCloseSession\(\) \{[\s\S]*?applyHostEndedSession\("已結束邀請場"\)/,
     );
+  });
+
+  it("suspends AI／seat poll on visibility hidden (PG-GAME-AGENT-GUIDE §3.5)", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(/visibilitychange/);
+    expect(src).toMatch(/pagehide/);
+    expect(src).toMatch(/function suspendGame\(/);
+    expect(src).toMatch(/function resumeGame\(/);
   });
 
   it("shows the seated opponent display name on the Host status line", () => {

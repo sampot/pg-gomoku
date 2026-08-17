@@ -2,16 +2,16 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
       content="瀏覽器五子棋：雙人、人機、AI 對 AI；亦可邀請遠端對手（gomoku.v1）。"
     />
-    <meta
-      name="sam:protocol"
-      content="gomoku.v1:host+player"
-    />
+    <meta name="sam:protocol" content="gomoku.v1:host+player" />
     <meta
       name="sam:capabilities"
       content="session:host, platform:invite"
@@ -19,96 +19,40 @@
     <title>五子棋</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
-    <main>
-      <header class="hero">
-        <h1>五子棋</h1>
-        <p class="tagline">連成五子即勝 · 本機或邀請對手</p>
-      </header>
+  <body data-layout="setup">
+    <main class="shell">
+      <div class="chrome-top">
+        <header class="hero">
+          <h1>五子棋</h1>
+          <p class="tagline">連成五子即勝 · 本機或邀請對手</p>
+        </header>
 
-      <section id="play-mode" class="play-mode" aria-label="遊玩方式">
-        <button type="button" id="mode-local" class="mode-btn is-active">
-          本機
-        </button>
-        <button type="button" id="mode-online" class="mode-btn">
-          邀請對弈
-        </button>
-      </section>
+        <section id="play-mode" class="play-mode" aria-label="遊玩方式">
+          <button type="button" id="mode-local" class="mode-btn is-active">
+            本機
+          </button>
+          <button type="button" id="mode-online" class="mode-btn">
+            邀請對弈
+          </button>
+        </section>
 
-      <section
-        id="online-panel"
-        class="online-panel"
-        hidden
-        aria-label="邀請對弈"
-      >
-        <p id="online-meta" class="muted">尚未開啟邀請場</p>
-        <div id="online-controls" class="controls online-controls">
-          <button type="button" id="btn-open-session" class="primary">
-            開場
-          </button>
-          <button type="button" id="btn-invite" class="primary" disabled>
-            邀請對手
-          </button>
-          <fieldset id="first-move" class="first-move" hidden>
-            <legend>誰先（執黑）</legend>
-            <label class="first-opt">
-              <input
-                type="radio"
-                name="first-role"
-                value="host"
-                checked
-              />
-              我先
-            </label>
-            <label class="first-opt">
-              <input type="radio" name="first-role" value="player" />
-              對手先
-            </label>
-          </fieldset>
-          <button type="button" id="btn-start-match" class="primary" disabled>
-            開始
-          </button>
-          <button type="button" id="btn-rematch" class="primary" disabled hidden>
-            再來一局
-          </button>
-          <button type="button" id="btn-close-session" class="secondary" disabled>
-            結束這一場
-          </button>
-        </div>
-        <div id="invite-box" class="invite-box" hidden>
-          <label class="invite-label" for="invite-url">短網址</label>
-          <div class="invite-row">
-            <input id="invite-url" type="text" readonly />
-            <button type="button" id="btn-copy-invite" class="secondary">
-              複製
-            </button>
+        <section id="match-hud" class="match-hud" aria-label="對局狀態">
+          <div class="hud-row">
+            <div class="hud-item">
+              <span class="hud-label">模式</span>
+              <strong id="mode-label">雙人</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">回合</span>
+              <strong id="turn-display">黑棋</strong>
+            </div>
+            <div class="hud-item" id="high-score-wrap" hidden>
+              <span class="hud-label">連勝</span>
+              <strong id="high-score">—</strong>
+            </div>
           </div>
-          <p class="hint muted">
-            對手無需註冊。你須已「登入我的遊樂場」。入座後選誰先（先手執黑），再按「開始」；終局後可改先手再「再來一局」。
-          </p>
-        </div>
-      </section>
-
-      <section id="local-toolbar" class="toolbar" aria-label="對局控制">
-        <div class="meta">
-          <p>
-            模式：<strong id="mode-label">雙人輪流</strong>
-          </p>
-          <p>
-            當前回合：<strong id="turn-display">黑棋</strong>
-          </p>
-          <p>
-            最高分（人機連勝）：<strong id="high-score">—</strong>
-          </p>
-        </div>
-        <div id="local-ai-controls" class="controls" aria-label="本機對弈">
-          <button type="button" id="start-ai">開始 AI 對弈</button>
-          <button type="button" id="start-ai-vs-ai">AI 對 AI 自動對弈</button>
-          <button type="button" id="reset-game" class="secondary">
-            重新開始
-          </button>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <div class="board-container">
         <canvas
@@ -120,7 +64,122 @@
         ></canvas>
       </div>
 
-      <p id="game-status" class="status" role="status">輪到黑棋，請落子。</p>
+      <div class="chrome-bottom">
+        <p id="game-status" class="status" role="status">輪到黑棋，請落子。</p>
+
+        <section id="local-toolbar" class="toolbar setup-panel" aria-label="本機設定">
+          <p class="panel-title">選擇本機對弈方式</p>
+          <div id="local-ai-controls" class="controls controls-secondary">
+            <button type="button" id="start-local-pvp" class="primary">
+              開始雙人對弈
+            </button>
+            <button type="button" id="start-ai" class="secondary">
+              挑戰 AI
+            </button>
+            <button type="button" id="start-ai-vs-ai" class="secondary">
+              AI 對 AI
+            </button>
+          </div>
+        </section>
+
+        <section
+          id="online-panel"
+          class="online-panel setup-panel"
+          hidden
+          aria-label="邀請對弈"
+        >
+          <p id="online-meta" class="muted">尚未開啟邀請場</p>
+          <div id="online-controls" class="controls online-controls">
+            <button type="button" id="btn-open-session" class="primary">
+              開場
+            </button>
+            <button
+              type="button"
+              id="btn-invite"
+              class="primary"
+              disabled
+              hidden
+            >
+              邀請對手
+            </button>
+            <fieldset id="first-move" class="first-move" hidden>
+              <legend>誰先（執黑）</legend>
+              <label class="first-opt">
+                <input
+                  type="radio"
+                  name="first-role"
+                  value="host"
+                  checked
+                />
+                我先
+              </label>
+              <label class="first-opt">
+                <input type="radio" name="first-role" value="player" />
+                對手先
+              </label>
+            </fieldset>
+            <button
+              type="button"
+              id="btn-start-match"
+              class="primary"
+              disabled
+              hidden
+            >
+              開始
+            </button>
+            <button
+              type="button"
+              id="btn-rematch"
+              class="primary"
+              disabled
+              hidden
+            >
+              再來一局
+            </button>
+            <button
+              type="button"
+              id="btn-close-session"
+              class="secondary"
+              disabled
+              hidden
+            >
+              結束這一場
+            </button>
+          </div>
+          <div id="invite-box" class="invite-box" hidden>
+            <label class="invite-label" for="invite-url">短網址</label>
+            <div class="invite-row">
+              <input id="invite-url" type="text" readonly />
+              <button type="button" id="btn-copy-invite" class="secondary">
+                複製
+              </button>
+            </div>
+            <p class="hint muted">
+              對手無需註冊。你須已「登入我的遊樂場」。入座後選誰先（先手執黑），再按「開始」；終局後可改先手再「再來一局」。
+            </p>
+          </div>
+        </section>
+
+        <details id="match-menu" class="match-menu" hidden>
+          <summary>對局選單</summary>
+          <div class="match-menu-actions">
+            <button type="button" id="reset-game" class="secondary">
+              重新開始
+            </button>
+            <button type="button" id="back-to-setup" class="secondary">
+              變更模式
+            </button>
+            <button
+              type="button"
+              id="btn-close-session-match"
+              class="secondary"
+              hidden
+            >
+              結束這一場
+            </button>
+          </div>
+        </details>
+      </div>
     </main>
 
     <script type="module" src="./app.js"></script>
