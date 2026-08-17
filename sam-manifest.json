@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "rev": "34f3937",
+  "files": [
+    "app.js",
+    "functions.js",
+    "gomoku.js",
+    "index.html",
+    "lifecycle.js",
+    "protocol.js",
+    "styles.css",
+    "ui-state.js"
+  ]
+}
