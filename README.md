@@ -52,6 +52,15 @@ python3 -m http.server 8080
 
 Session protocol：`gomoku.v1`。UI 經本 SAM `/api/online/*` → `env.HOST`（DEC-053）；Guest 經 `env.SESSION`。見 [PG-INVITE-E2E-MVP](https://github.com/sampot/playgrounds/blob/main/docs/PG-INVITE-E2E-MVP.md)。
 
+**殼層語境（`pg_surface`）：**
+
+| 入口 | 行為 |
+| --- | --- |
+| go `/s/pg-gomoku`（`pg_surface=solo` 或缺省） | **只單機**（雙人／AI／AI對AI）；不露連線邀請 |
+| 包廂大螢幕（`pg_surface=room`） | **只連線對弈**；入座席由包廂殼層完成；遊戲內選先手／開始／結束局 |
+
+連線快樂路徑＝包廂 [`session_play`](https://github.com/sampot/playgrounds/blob/main/docs/PG-GO-ROOM-PLAY-PLAN.md)，不是 `/s/` 內邀請對弈。
+
 ## 檔案
 
 | 檔案 | 說明 |

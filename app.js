@@ -10,11 +10,15 @@ import {
   gomokuProtocolSpec,
 } from "./protocol.js";
 import { deriveChromeState } from "./ui-state.js";
+import { readPgSurface } from "./shellSurface.js";
 
 const BOARD_SIZE = GOMOKU_BOARD_SIZE;
 const CELL_SIZE = 40;
 const PADDING = 20;
 const CANVAS_SIZE = PADDING * 2 + CELL_SIZE * (BOARD_SIZE - 1);
+
+/** @type {"solo" | "room"} */
+const shellSurface = readPgSurface();
 
 /** @type {'local' | 'online'} */
 let playMode = "local";
@@ -1168,7 +1172,8 @@ function syncOnlineControls() {
   const isReady = onlineStatus === "ready";
   const isActive = onlineStatus === "active";
   const isEnded = onlineStatus === "ended";
-  const canInvite = hosting && (isWaiting || isReady);
+  const room = shellSurface === "room";
+  const canInvite = !room && hosting && (isWaiting || isReady);
   const showFirstPick = hosting && (isReady || isEnded);
 
   btnOpenSession.disabled = hosting;
@@ -1178,15 +1183,17 @@ function syncOnlineControls() {
   btnRematch.disabled = !(hosting && isEnded);
   firstMoveField.hidden = !showFirstPick;
 
-  // Invitee: play-first — hide mode switch + host CTAs.
-  playModeSection.hidden = asPlayer;
+  // Invitee / booth: hide mode switch + local-only host CTAs.
+  playModeSection.hidden = asPlayer || room;
   onlineControls.hidden = asPlayer;
 
   const stoneTxt =
     myOnlineStone != null ? `你執${stoneLabel(myOnlineStone)}` : "先手待定";
 
   if (asPlayer) {
-    onlineMeta.textContent = `參與中 · ${stoneTxt}`;
+    onlineMeta.textContent = room
+      ? `包廂對弈 · ${stoneTxt}`
+      : `參與中 · ${stoneTxt}`;
     inviteBox.hidden = true;
     btnOpenSession.hidden = true;
     btnInvite.hidden = true;
@@ -1195,7 +1202,9 @@ function syncOnlineControls() {
     btnCloseSession.hidden = true;
   } else if (hosting) {
     const statusLabel = isWaiting
-      ? "等候對手"
+      ? room
+        ? "等候對手入座"
+        : "等候對手"
       : isReady
         ? "可開始"
         : isActive
@@ -1203,17 +1212,20 @@ function syncOnlineControls() {
           : isEnded
             ? "終局"
             : onlineStatus;
-    onlineMeta.textContent = `主持 · ${statusLabel} · ${stoneTxt}`;
+    onlineMeta.textContent = room
+      ? `包廂主持 · ${statusLabel} · ${stoneTxt}`
+      : `主持 · ${statusLabel} · ${stoneTxt}`;
     btnOpenSession.hidden = true;
     btnInvite.hidden = !canInvite;
     btnStartMatch.hidden = !isReady;
     btnRematch.hidden = !isEnded;
     btnCloseSession.hidden = false;
-    // Keep invite URL while waiting／ready; tuck away once the match starts.
-    if (isActive || isEnded) inviteBox.hidden = true;
+    if (isActive || isEnded || room) inviteBox.hidden = true;
   } else {
-    onlineMeta.textContent = "尚未開啟邀請場";
-    btnOpenSession.hidden = false;
+    onlineMeta.textContent = room
+      ? "包廂開局中…"
+      : "尚未開啟邀請場";
+    btnOpenSession.hidden = room;
     btnInvite.hidden = true;
     btnStartMatch.hidden = true;
     btnRematch.hidden = true;
@@ -1426,7 +1438,9 @@ async function onCloseSession() {
       sessionChannel = null;
     }
     await online("/close", { method: "POST" });
-    applyHostEndedSession("已結束邀請場");
+    applyHostEndedSession(
+      shellSurface === "room" ? "已結束這一局" : "已結束邀請場",
+    );
   } catch (e) {
     setStatus(String(e.message || e), "danger");
   }
@@ -1485,7 +1499,63 @@ async function tryBootAsPlayer() {
   }
 }
 
+/** Booth Host: adopt shell-opened session (no 開場／邀請). */
+async function tryBootAsRoomHost() {
+  if (shellSurface !== "room") return false;
+  try {
+    const st = await online("/status");
+    if (!st?.active || !st.channelName) return false;
+    playMode = "online";
+    onlineRole = "host";
+    myOnlineStone = null;
+    onlinePanel.hidden = false;
+    modeLocalBtn.classList.toggle("is-active", false);
+    modeOnlineBtn.classList.toggle("is-active", true);
+    updateChrome();
+    bindSessionChannel(st.channelName);
+    lastSeq = 0;
+    await loadOnlineState();
+    startSeatPoll();
+    syncOnlineControls();
+    setStatus(
+      onlineStatus === "ready"
+        ? "對手已入座 — 選先手後按「開始」"
+        : "包廂開局 — 等候對手入座",
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function applySoloShell() {
+  modeOnlineBtn.hidden = true;
+  onlinePanel.hidden = true;
+  const tag = document.querySelector(".tagline");
+  if (tag) tag.textContent = "連成五子即勝 · 本機對弈";
+  onlinePanel.setAttribute("aria-label", "本機（連線請走包廂）");
+}
+
+function applyRoomShell() {
+  playMode = "online";
+  playModeSection.hidden = true;
+  localToolbar.hidden = true;
+  onlinePanel.hidden = false;
+  modeLocalBtn.classList.remove("is-active");
+  modeOnlineBtn.classList.add("is-active");
+  const tag = document.querySelector(".tagline");
+  if (tag) tag.textContent = "連成五子即勝 · 包廂對弈";
+  onlinePanel.setAttribute("aria-label", "包廂對弈");
+  inviteBox.hidden = true;
+  btnOpenSession.hidden = true;
+  btnInvite.hidden = true;
+  syncOnlineControls();
+  updateChrome();
+}
+
 function setPlayMode(next) {
+  if (shellSurface === "solo" && next === "online") return;
+  if (shellSurface === "room" && next === "local") return;
   if (next === playMode) return;
   if (next === "local") {
     stopSeatPoll();
@@ -1677,4 +1747,23 @@ updateChrome();
 fitBoardSquare();
 refreshStatus();
 void loadHighScore();
-void tryBootAsPlayer();
+
+async function bootShellSurface() {
+  if (shellSurface === "solo") {
+    applySoloShell();
+    return;
+  }
+  if (shellSurface === "room") {
+    applyRoomShell();
+    if (await tryBootAsPlayer()) return;
+    for (let i = 0; i < 20; i++) {
+      if (await tryBootAsRoomHost()) return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    setStatus("包廂開局中 — 等候通道就緒…");
+    return;
+  }
+  void tryBootAsPlayer();
+}
+
+void bootShellSurface();

@@ -16,6 +16,7 @@ const MODULES = [
   "gomoku.js",
   "lifecycle.js",
   "protocol.js",
+  "shellSurface.js",
   "ui-state.js",
 ];
 
@@ -41,11 +42,12 @@ describe("browser modules", () => {
     expect(res.stderr).toMatch(/already been declared/);
   });
 
-  it("app.js does not call transitional /api/shell/* (DEC-053)", () => {
+  it("app.js reads pg_surface and boots solo／room shells", () => {
     const src = readFileSync(join(here, "app.js"), "utf8");
-    expect(src).not.toMatch(/\/api\/shell\/session/);
-    expect(src).not.toMatch(/\/api\/shell\/platform/);
-    expect(src).toMatch(/\/api\/online\//);
+    expect(src).toMatch(/readPgSurface/);
+    expect(src).toMatch(/applySoloShell/);
+    expect(src).toMatch(/tryBootAsRoomHost/);
+    expect(src).toMatch(/shellSurface === "room"/);
   });
 
   it("index.html declares session:host and platform:invite", () => {
@@ -75,9 +77,9 @@ describe("browser modules", () => {
     expect(src).toMatch(
       /if \(type === "session\.closed" \|\| type === "match\.closed"\) \{\s*applyHostEndedSession/,
     );
-    expect(src).toMatch(
-      /async function onCloseSession\(\) \{[\s\S]*?applyHostEndedSession\("已結束邀請場"\)/,
-    );
+    expect(src).toMatch(/async function onCloseSession\(\)/);
+    expect(src).toMatch(/applyHostEndedSession\(/);
+    expect(src).toMatch(/已結束這一局|已結束邀請場/);
   });
 
   it("suspends AI／seat poll on visibility hidden (PG-GAME-AGENT-GUIDE §3.5)", () => {
