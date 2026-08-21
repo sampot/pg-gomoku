@@ -93,7 +93,7 @@ describe("browser modules", () => {
   it("sam-manifest lists every browser module app.js imports", () => {
     const manifest = JSON.parse(
       readFileSync(join(here, "sam-manifest.json"), "utf8")
-    ) as { files: string[] };
+    );
     expect(manifest.files).toEqual(
       expect.arrayContaining([
         "app.js",
