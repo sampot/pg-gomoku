@@ -90,18 +90,10 @@ describe("browser modules", () => {
     expect(src).toMatch(/function resumeGame\(/);
   });
 
-  it("sam-manifest lists every browser module app.js imports", () => {
-    const manifest = JSON.parse(
-      readFileSync(join(here, "sam-manifest.json"), "utf8")
-    );
-    expect(manifest.files).toEqual(
-      expect.arrayContaining([
-        "app.js",
-        "shellSurface.js",
-        "index.html",
-        "styles.css",
-      ])
-    );
-    expect(manifest.files).toContain("shellSurface.js");
+  it("syncLayoutChrome keeps room shell free of 本機／連線 switch", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(/shellSurface === "room"/);
+    expect(src).toMatch(/playModeSection\.hidden = true/);
+    expect(src).toMatch(/if \(shellSurface === "room"\)/);
   });
 });

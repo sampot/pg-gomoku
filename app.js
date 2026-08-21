@@ -558,9 +558,19 @@ function syncLayoutChrome() {
   document.body.dataset.layout = chrome.layout;
   document.body.dataset.phase = chrome.phase;
 
-  playModeSection.hidden = !chrome.showSetup;
-  localToolbar.hidden = !(chrome.showSetup && playMode === "local");
-  onlinePanel.hidden = !(chrome.showSetup && playMode === "online");
+  if (shellSurface === "room") {
+    playModeSection.hidden = true;
+    localToolbar.hidden = true;
+    onlinePanel.hidden = !chrome.showSetup;
+  } else if (shellSurface === "solo") {
+    playModeSection.hidden = true;
+    localToolbar.hidden = !(chrome.showSetup && playMode === "local");
+    onlinePanel.hidden = true;
+  } else {
+    playModeSection.hidden = !chrome.showSetup;
+    localToolbar.hidden = !(chrome.showSetup && playMode === "local");
+    onlinePanel.hidden = !(chrome.showSetup && playMode === "online");
+  }
   document.getElementById("match-hud").hidden = !chrome.showHud;
   matchMenu.hidden = !chrome.showMatchMenu;
 
