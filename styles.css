@@ -866,3 +866,170 @@ button:disabled {
     transform: none;
   }
 }
+
+/*
+ * Booth TV iframe (`pg_surface=room`): fit the slot height and never clip the
+ * turn／seat message row under a full-width square board.
+ */
+body[data-pg-surface="room"] {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body[data-pg-surface="room"] .shell {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+}
+
+body[data-pg-surface="room"] .hero h1 {
+  font-size: clamp(1.05rem, 3.2vw, 1.45rem);
+}
+
+body[data-pg-surface="room"] .tagline {
+  font-size: 0.78rem;
+}
+
+/* Setup: keep status with controls above the board (not below the fold). */
+body[data-pg-surface="room"][data-layout="setup"] .status {
+  order: 2;
+}
+
+body[data-pg-surface="room"][data-layout="setup"] .board-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  container-type: size;
+}
+
+body[data-pg-surface="room"][data-layout="setup"] #game-board {
+  width: min(100cqw, 100cqh);
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
+
+/* Active play: status＋controls above the board; board fills leftover only. */
+body[data-pg-surface="room"][data-layout="match"] .chrome-bottom,
+body[data-pg-surface="room"][data-layout="guest"] .chrome-bottom {
+  order: 1;
+}
+
+body[data-pg-surface="room"][data-layout="match"] .chrome-top,
+body[data-pg-surface="room"][data-layout="guest"] .chrome-top {
+  order: 0;
+}
+
+body[data-pg-surface="room"][data-layout="match"] .board-container,
+body[data-pg-surface="room"][data-layout="guest"] .board-container {
+  order: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: auto;
+  aspect-ratio: auto;
+  container-type: size;
+}
+
+body[data-pg-surface="room"][data-layout="match"] #game-board,
+body[data-pg-surface="room"][data-layout="guest"] #game-board {
+  width: min(100cqw, 100cqh);
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
+
+body[data-pg-surface="room"] .chrome-bottom,
+body[data-pg-surface="room"] .status {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+body[data-pg-surface="room"] .status {
+  font-size: 0.88rem;
+  padding: 0.45rem 0.55rem;
+}
+
+/* Room iframe can be wide enough to hit desktop rules — stay single-column. */
+@media (min-width: 64rem) and (min-height: 38rem) {
+  body[data-pg-surface="room"][data-layout="match"] .shell,
+  body[data-pg-surface="room"][data-layout="guest"] .shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0.35rem 0.45rem;
+    grid-template-columns: none;
+    grid-template-rows: none;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] .board-container,
+  body[data-pg-surface="room"][data-layout="guest"] .board-container {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] .chrome-bottom,
+  body[data-pg-surface="room"][data-layout="guest"] .chrome-bottom {
+    grid-column: auto;
+    grid-row: auto;
+    overflow-y: visible;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] #game-board,
+  body[data-pg-surface="room"][data-layout="guest"] #game-board {
+    max-width: none;
+    max-height: 100%;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  body[data-pg-surface="room"][data-layout="match"] .shell,
+  body[data-pg-surface="room"][data-layout="guest"] .shell {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    padding: 0.3rem 0.4rem;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] .chrome-top,
+  body[data-pg-surface="room"][data-layout="guest"] .chrome-top {
+    display: none;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] .board-container,
+  body[data-pg-surface="room"][data-layout="guest"] .board-container {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] .chrome-bottom,
+  body[data-pg-surface="room"][data-layout="guest"] .chrome-bottom {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: stretch;
+  }
+}
+
+@media (orientation: portrait) and (min-height: 640px) {
+  body[data-pg-surface="room"][data-layout="match"] .board-container,
+  body[data-pg-surface="room"][data-layout="guest"] .board-container {
+    flex: 1 1 auto;
+    width: auto;
+    aspect-ratio: auto;
+    container-type: size;
+  }
+
+  body[data-pg-surface="room"][data-layout="match"] #game-board,
+  body[data-pg-surface="room"][data-layout="guest"] #game-board {
+    width: min(100cqw, 100cqh);
+    height: auto;
+  }
+}

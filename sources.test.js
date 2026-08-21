@@ -96,4 +96,17 @@ describe("browser modules", () => {
     expect(src).toMatch(/playModeSection\.hidden = true/);
     expect(src).toMatch(/if \(shellSurface === "room"\)/);
   });
+
+  it("room surface marks body and keeps status visible inside the TV iframe", () => {
+    const app = readFileSync(join(here, "app.js"), "utf8");
+    expect(app).toMatch(/dataset\.pgSurface\s*=\s*shellSurface/);
+    const css = readFileSync(join(here, "styles.css"), "utf8");
+    expect(css).toMatch(/data-pg-surface=["']room["']/);
+    expect(css).toMatch(
+      /body\[data-pg-surface=["']room["']\][\s\S]*?\.status/,
+    );
+    expect(css).toMatch(
+      /body\[data-pg-surface=["']room["']\][\s\S]*?min-height:\s*0/,
+    );
+  });
 });

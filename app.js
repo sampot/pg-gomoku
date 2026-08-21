@@ -19,6 +19,7 @@ const CANVAS_SIZE = PADDING * 2 + CELL_SIZE * (BOARD_SIZE - 1);
 
 /** @type {"solo" | "room"} */
 const shellSurface = readPgSurface();
+document.body.dataset.pgSurface = shellSurface;
 
 /** @type {'local' | 'online'} */
 let playMode = "local";
