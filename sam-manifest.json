@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "rev": "34f3937",
+  "rev": "dd68039",
   "files": [
     "app.js",
     "functions.js",
@@ -8,6 +8,7 @@
     "index.html",
     "lifecycle.js",
     "protocol.js",
+    "shellSurface.js",
     "styles.css",
     "ui-state.js"
   ]

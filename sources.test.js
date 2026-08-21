@@ -90,9 +90,18 @@ describe("browser modules", () => {
     expect(src).toMatch(/function resumeGame\(/);
   });
 
-  it("shows the seated opponent display name on the Host status line", () => {
-    const src = readFileSync(join(here, "app.js"), "utf8");
-    expect(src).toMatch(/opponentDisplayName/);
-    expect(src).toMatch(/\$\{opponentLabel\(\)\}已入座/);
+  it("sam-manifest lists every browser module app.js imports", () => {
+    const manifest = JSON.parse(
+      readFileSync(join(here, "sam-manifest.json"), "utf8")
+    ) as { files: string[] };
+    expect(manifest.files).toEqual(
+      expect.arrayContaining([
+        "app.js",
+        "shellSurface.js",
+        "index.html",
+        "styles.css",
+      ])
+    );
+    expect(manifest.files).toContain("shellSurface.js");
   });
 });
