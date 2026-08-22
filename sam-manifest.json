@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "rev": "spectator-fix-1",
+  "rev": "spectator-fix-2",
   "files": [
     "app.js",
     "functions.js",
