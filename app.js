@@ -1082,7 +1082,7 @@ function bindSessionChannel(channelName) {
       applyEventToOnlineBoard(event);
       return;
     }
-    if (onlineRole === "player") {
+    if (onlineRole === "player" || onlineRole === "spectator") {
       applyEventToOnlineBoard(event);
       return;
     }
@@ -1137,6 +1137,30 @@ function applyOnlineState(state) {
 }
 
 function refreshOnlineStatusText() {
+  if (onlineRole === "spectator") {
+    if (onlineStatus === "waiting" || onlineStatus === "ready") {
+      setStatus("觀戰中 — 等候開局");
+      return;
+    }
+    if (onlineStatus === "active") {
+      setStatus("觀戰中 — 對弈進行中");
+      return;
+    }
+    if (onlineStatus === "ended") {
+      const line = findWinningLine(lastDrawnBoard, lastDrawnMove, BOARD_SIZE);
+      const winPlayer = line
+        ? lastDrawnBoard?.[line[0].y]?.[line[0].x]
+        : null;
+      const outcome =
+        winPlayer === 1 || winPlayer === 2
+          ? `${playerName(winPlayer)}連五獲勝！`
+          : "平局 — 棋盤已滿。";
+      const tone =
+        winPlayer === 1 ? "black" : winPlayer === 2 ? "white" : "draw";
+      setStatus(`觀戰 · ${outcome}`, tone);
+      return;
+    }
+  }
   if (onlineRole === "player") {
     if (onlineStatus === "waiting" || onlineStatus === "ready") {
       setStatus("已入座 — 等待主持選先手並開始");
@@ -1179,6 +1203,7 @@ function refreshOnlineStatusText() {
 function syncOnlineControls() {
   const hosting = onlineRole === "host";
   const asPlayer = onlineRole === "player";
+  const asSpectator = onlineRole === "spectator";
   const isWaiting = onlineStatus === "waiting";
   const isReady = onlineStatus === "ready";
   const isActive = onlineStatus === "active";
@@ -1195,13 +1220,21 @@ function syncOnlineControls() {
   firstMoveField.hidden = !showFirstPick;
 
   // Invitee / booth: hide mode switch + local-only host CTAs.
-  playModeSection.hidden = asPlayer || room;
-  onlineControls.hidden = asPlayer;
+  playModeSection.hidden = asPlayer || asSpectator || room;
+  onlineControls.hidden = asPlayer || asSpectator;
 
   const stoneTxt =
     myOnlineStone != null ? `你執${stoneLabel(myOnlineStone)}` : "先手待定";
 
-  if (asPlayer) {
+  if (asSpectator) {
+    onlineMeta.textContent = room ? "包廂觀戰" : "觀戰中";
+    inviteBox.hidden = true;
+    btnOpenSession.hidden = true;
+    btnInvite.hidden = true;
+    btnStartMatch.hidden = true;
+    btnRematch.hidden = true;
+    btnCloseSession.hidden = true;
+  } else if (asPlayer) {
     onlineMeta.textContent = room
       ? `包廂對弈 · ${stoneTxt}`
       : `參與中 · ${stoneTxt}`;
@@ -1248,7 +1281,7 @@ function syncOnlineControls() {
 
 async function loadOnlineState() {
   if (onlineRole === "idle") return null;
-  if (onlineRole === "player") {
+  if (onlineRole === "player" || onlineRole === "spectator") {
     const state = await domain("/api/session/state");
     if (typeof state.seq === "number") lastSeq = Math.max(lastSeq, state.seq);
     if (state.channelName) bindSessionChannel(state.channelName);
@@ -1504,6 +1537,32 @@ async function tryBootAsPlayer() {
         ? "已入座 — 等待主持選先手並開始"
         : "主持席已就緒",
     );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Booth spectator: same canvas, event sync only (no act). */
+async function tryBootAsSpectator() {
+  if (shellSurface !== "room") return false;
+  try {
+    const seat = await domain("/api/session/seat");
+    if (!seat || String(seat.role || "") !== "spectator") return false;
+    playMode = "online";
+    onlineRole = "spectator";
+    myOnlineStone = null;
+    onlineSection.hidden = false;
+    modeLocalBtn.classList.toggle("is-active", false);
+    modeOnlineBtn.classList.toggle("is-active", true);
+    updateChrome();
+    const ch = await domain("/api/session/channel");
+    if (ch?.name) bindSessionChannel(ch.name);
+    await loadOnlineState().catch(() => {
+      /* stub getState — board follows session-event fanout */
+    });
+    syncOnlineControls();
+    setStatus("觀戰中 — 畫面隨對局更新");
     return true;
   } catch {
     return false;
@@ -1769,6 +1828,7 @@ async function bootShellSurface() {
     if (await tryBootAsPlayer()) return;
     for (let i = 0; i < 20; i++) {
       if (await tryBootAsRoomHost()) return;
+      if (await tryBootAsSpectator()) return;
       await new Promise((r) => setTimeout(r, 250));
     }
     setStatus("包廂開局中 — 等候通道就緒…");

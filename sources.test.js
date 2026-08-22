@@ -109,4 +109,12 @@ describe("browser modules", () => {
       /body\[data-pg-surface=["']room["']\][\s\S]*?min-height:\s*0/,
     );
   });
+
+  it("boots booth spectators and applies session events", () => {
+    const src = readFileSync(join(here, "app.js"), "utf8");
+    expect(src).toMatch(/async function tryBootAsSpectator/);
+    expect(src).toMatch(/!== "spectator"/);
+    expect(src).toMatch(/onlineRole === "player" \|\| onlineRole === "spectator"/);
+    expect(src).toMatch(/if \(await tryBootAsSpectator\(\)\) return/);
+  });
 });
