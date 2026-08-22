@@ -116,5 +116,10 @@ describe("browser modules", () => {
     expect(src).toMatch(/!== "spectator"/);
     expect(src).toMatch(/onlineRole === "player" \|\| onlineRole === "spectator"/);
     expect(src).toMatch(/if \(await tryBootAsSpectator\(\)\) return/);
+    // Must use onlinePanel (not a typo like onlineSection) or boot silently fails.
+    expect(src).toMatch(
+      /async function tryBootAsSpectator\(\)[\s\S]*?onlinePanel\.hidden = false/
+    );
+    expect(src).not.toMatch(/onlineSection/);
   });
 });

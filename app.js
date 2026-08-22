@@ -1552,7 +1552,7 @@ async function tryBootAsSpectator() {
     playMode = "online";
     onlineRole = "spectator";
     myOnlineStone = null;
-    onlineSection.hidden = false;
+    onlinePanel.hidden = false;
     modeLocalBtn.classList.toggle("is-active", false);
     modeOnlineBtn.classList.toggle("is-active", true);
     updateChrome();
