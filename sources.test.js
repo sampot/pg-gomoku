@@ -97,6 +97,14 @@ describe("browser modules", () => {
     expect(src).toMatch(/if \(shellSurface === "room"\)/);
   });
 
+  it("solo shell hides 本機／連線 mode switch (go /s/ only)", () => {
+    const app = readFileSync(join(here, "app.js"), "utf8");
+    expect(app).toMatch(/shellSurface === "solo"/);
+    expect(app).toMatch(/playModeSection\.hidden = true/);
+    const css = readFileSync(join(here, "styles.css"), "utf8");
+    expect(css).toMatch(/data-pg-surface=["']solo["'][\s\S]*?#play-mode/);
+  });
+
   it("room surface marks body and keeps status visible inside the TV iframe", () => {
     const app = readFileSync(join(here, "app.js"), "utf8");
     expect(app).toMatch(/dataset\.pgSurface\s*=\s*shellSurface/);

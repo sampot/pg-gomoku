@@ -1219,8 +1219,9 @@ function syncOnlineControls() {
   btnRematch.disabled = !(hosting && isEnded);
   firstMoveField.hidden = !showFirstPick;
 
-  // Invitee / booth: hide mode switch + local-only host CTAs.
-  playModeSection.hidden = asPlayer || asSpectator || room;
+  // Invitee / booth / solo: hide mode switch + local-only host CTAs.
+  playModeSection.hidden =
+    asPlayer || asSpectator || room || shellSurface === "solo";
   onlineControls.hidden = asPlayer || asSpectator;
 
   const stoneTxt =
@@ -1599,11 +1600,15 @@ async function tryBootAsRoomHost() {
 }
 
 function applySoloShell() {
+  playMode = "local";
+  playModeSection.hidden = true;
+  modeLocalBtn.hidden = true;
   modeOnlineBtn.hidden = true;
   onlinePanel.hidden = true;
   const tag = document.querySelector(".tagline");
   if (tag) tag.textContent = "連成五子即勝 · 本機對弈";
   onlinePanel.setAttribute("aria-label", "本機（連線請走包廂）");
+  updateChrome();
 }
 
 function applyRoomShell() {

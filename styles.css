@@ -871,6 +871,11 @@ button:disabled {
  * Booth TV iframe (`pg_surface=room`): fit the slot height and never clip the
  * turn／seat message row under a full-width square board.
  */
+body[data-pg-surface="solo"] #play-mode,
+body[data-pg-surface="solo"] #online-panel {
+  display: none;
+}
+
 body[data-pg-surface="room"] {
   min-height: 0;
   height: 100%;

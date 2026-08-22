@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "rev": "spectator-no-menu-1",
+  "rev": "solo-hide-mode-switch-1",
   "files": [
     "app.js",
     "functions.js",
