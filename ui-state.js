@@ -12,7 +12,8 @@ export function deriveChromeState({
 }) {
   if (playMode === "online") {
     const active = onlineStatus === "active";
-    const guest = onlineRole === "player";
+    const guest =
+      onlineRole === "player" || onlineRole === "spectator";
     return {
       layout: active && guest ? "guest" : active ? "match" : "setup",
       phase: onlineStatus,

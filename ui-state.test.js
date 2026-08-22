@@ -113,4 +113,29 @@ describe("deriveChromeState", () => {
       showMatchMenu: false,
     });
   });
+
+  it("hides match menu for booth spectators", () => {
+    expect(
+      deriveChromeState({
+        playMode: "online",
+        onlineRole: "spectator",
+        onlineStatus: "active",
+      }),
+    ).toMatchObject({
+      layout: "guest",
+      phase: "active",
+      showSetup: false,
+      showMatchMenu: false,
+    });
+    expect(
+      deriveChromeState({
+        playMode: "online",
+        onlineRole: "spectator",
+        onlineStatus: "waiting",
+      }),
+    ).toMatchObject({
+      showSetup: false,
+      showMatchMenu: false,
+    });
+  });
 });
